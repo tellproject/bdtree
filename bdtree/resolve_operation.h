@@ -35,22 +35,7 @@ namespace bdtree {
             return true;
         }
         bool visit(inner_node<Key, Value>& n) override {
-            assert(deltas.size() <= 1);
-            for (std::pair<physical_pointer, node<Key, Value>*> p : deltas) {
-                switch (p.second->get_node_type()) {
-                case node_type_t::SplitDelta:
-                    assert(false);
-                    return false;
-                case node_type_t::MergeDelta:
-                    assert(false);
-                    return false;
-                case node_type_t::RemoveDelta:
-                    assert(false);
-                    return false;
-                default:
-                    assert(false);
-                }
-            }
+            assert(deltas.size() == 0);
             result = &n;
             return true;
         }
@@ -78,17 +63,9 @@ namespace bdtree {
                     n.array_.erase(del_pos);
                 }
                     break;
-                case node_type_t::SplitDelta:
-                    assert(false);
-                    return false;
-                case node_type_t::MergeDelta:
-                    assert(false);
-                    return false;
-                case node_type_t::RemoveDelta:
-                    assert(false);
-                    return false;
                 default:
                     assert(false);
+                    return false;
                 }
             }
             n.deltas_.reserve(n.deltas_.size() + old_deltas.size());
