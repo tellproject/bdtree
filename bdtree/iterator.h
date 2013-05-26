@@ -61,6 +61,7 @@ namespace bdtree {
             rules.givenVersion = current_->rc_version_;
             rules.versionNeGiven = 1;
             uint64_t rc_version;
+            auto last_tx_id = get_last_tx_id();
             rc_res = rc_write_with_reject(context_->get_ptr_table().value, current_->lptr_.value_ptr(), current_->lptr_.length, pptr.value_ptr(), pptr.length, &rules, &rc_version);
             if (rc_res == STATUS_WRONG_VERSION || rc_res == STATUS_OBJECT_DOESNT_EXIST) {
                 delete nl;
@@ -69,7 +70,7 @@ namespace bdtree {
             }
             node_pointer<Key, Value>* np = new node_pointer<Key, Value>(current_->lptr_, pptr, rc_version);
             np->node_ = nl;
-            if (!context_->cache.add_entry(np, 0)) {//TODO: get real tx_id
+            if (!context_->cache.add_entry(np, last_tx_id)) {
                 delete np;
                 ++(*this);
             } else {

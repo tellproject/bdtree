@@ -22,6 +22,7 @@ namespace bdtree {
     };
     
     extern uint64_t get_next_tx_id();
+    extern void got_tx_id(uint64_t tx_id);
     extern uint64_t get_last_tx_id();
     
     struct logical_pointer_table {
