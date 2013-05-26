@@ -36,11 +36,10 @@ namespace bdtree {
             leaf_node<Key, Value>* leaf = current_->as_leaf();
             bool consolidate = leaf->deltas_.size() >= CONSOLIDATE_AT;
             leaf_node<Key, Value>* nl = new leaf_node<Key, Value>(*leaf);
-            auto iter = nl->array_.find(current_iterator_->first);
-            nl->array_.erase(iter);
+            size_t current_index = current_iterator_ - current_->as_leaf()->array_.begin();
+            nl->array_.erase(nl->array_.begin() + current_index);
             physical_pointer pptr = context_->cache.get_next_physical_ptr();
             std::vector<uint8_t> data;
-            auto current_index = current_iterator_ - current_->array_.begin();
             if (consolidate) {
                 data = nl->serialize();
             } else {
@@ -59,7 +58,7 @@ namespace bdtree {
             assert(rc_res == STATUS_OK);
             ramcloud_reject_rules rules;
             rules.doesntExist = 1;
-            rules.givenVersion = current_->rc_version;
+            rules.givenVersion = current_->rc_version_;
             rules.versionNeGiven = 1;
             uint64_t rc_version;
             rc_res = rc_write_with_reject(context_->get_ptr_table().value, current_->lptr_.value_ptr(), current_->lptr_.length, pptr.value_ptr(), pptr.length, &rules, &rc_version);
@@ -70,16 +69,16 @@ namespace bdtree {
             }
             node_pointer<Key, Value>* np = new node_pointer<Key, Value>(current_->lptr_, pptr, rc_version);
             np->node_ = nl;
-            if (!context_->cache.add_entry(np)) {
+            if (!context_->cache.add_entry(np, 0)) {//TODO: get real tx_id
                 delete np;
                 ++(*this);
             } else {
                 current_ = np;
-                if (current_->array_.size() <= current_index) {
-                    current_iterator_ = current_->array_.end() - 1;
+                if (current_->as_leaf()->array_.size() <= current_index) {
+                    current_iterator_ = current_->as_leaf()->array_.end() - 1;
                     ++(*this);
                 } else {
-                    current_iterator_ = current_->array_.begin() + current_index;
+                    current_iterator_ = current_->as_leaf()->array_.begin() + current_index;
                 }
             }
             return erase_result::Success;
@@ -184,16 +183,16 @@ namespace bdtree {
             if (other.after() || after()) {
                 return current_ == other.current_;
             }
-            return (**this).first == (*other).first;//TODO: nicer
+            return (**this) == (*other);//TODO: nicer
         }
         bool operator !=(const bdtree_iterator<Key,Value>& other) const {
             return !(*this == other);
         }
-        const std::pair<Key, Value>& operator *() const {
-            return *current_iterator_;
+        const Key& operator *() const {
+            return current_iterator_->first;
         }
-        const std::pair<Key, Value>* operator ->() const {
-            return &(*current_iterator_);
+        const Key* operator ->() const {
+            return &(**this);
         }
     };
 }

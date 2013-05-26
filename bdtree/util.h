@@ -58,6 +58,20 @@ struct null_key<std::pair<T,U> > {
     }
 };
 
+template<typename T, typename... U>
+struct null_key<std::tuple<T,U...> > {
+    static constexpr std::tuple<T, U...> value() {
+        return std::tuple_cat(std::forward_as_tuple(null_key<T>::value()),null_key<std::tuple<U...> >::value());
+    }
+};
+
+template<typename T>
+struct null_key<std::tuple<T> > {
+    static constexpr std::tuple<T> value() {
+        return std::forward_as_tuple(null_key<T>::value());
+    }
+};
+
 template<typename ForwardIt, typename T, typename Compare>
 ForwardIt last_smaller_equal(ForwardIt first, ForwardIt last, const T& value, Compare cmp) {
     return --std::upper_bound(first, last, value, cmp);
@@ -99,10 +113,13 @@ template<typename Key, typename Value>
 node_pointer<Key, Value>* fix_stack(const Key& key, operation_context<Key, Value>& context, search_bound bound) {
     assert(!context.node_stack.empty());
     node_pointer<Key, Value>* np = nullptr;
-    guard g{[&np]() {
+#ifndef NDEBUG
+    __attribute__ ((unused)) guard _{[&np]() {
         return np && np->node_;
     }};
+#endif
     for (;;) {
+        assert(!context.node_stack.empty());
         auto lptr = context.node_stack.top();
         np = context.cache.get_without_cache(lptr, context);
         if (np == nullptr) {

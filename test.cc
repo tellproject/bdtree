@@ -98,7 +98,7 @@ int main() {
         assert(iter != end);
         uint64_t i = 1;
         for (;iter != end; ++iter) {
-            auto key = iter->first;
+            auto key = *iter;
             assert(key == i);
             ++i;
         }
@@ -138,7 +138,7 @@ int main() {
         bdtree::map<uint64_t, uint64_t> map(cache, bdtree::get_next_tx_id());
         for (uint64_t i = 1; i <= 10000; i++) {
             auto iter = map.find(i);
-            bool found = iter->first == i;
+            bool found = *iter == i;
             if (found) assert(i % 3);
             else assert(i % 3 == 0);
         }
@@ -149,7 +149,7 @@ int main() {
     bdtree::map<uint64_t, uint64_t> map(cache, bdtree::get_next_tx_id());
     for (uint64_t i = 1; i <= 1; i++) {
         auto iter = map.find(1);
-        bool found = iter->first == 1;
+        bool found = *iter == 1;
         assert(found);
         map.erase(1);
         map.insert(1,1000);

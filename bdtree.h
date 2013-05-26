@@ -101,8 +101,8 @@ namespace bdtree {
             return exec_leaf_operation(key, cache_, tx_id_, op);
         }
         
-        bool erase_if_no_newer(iterator& iter) {
-            iter.erase_if_no_newer();
+        bool remove_if_unmodified(iterator& iter) {
+            return iter.erase_if_no_newer() == erase_result::Success;
         }
 
         void print_statistics() {
