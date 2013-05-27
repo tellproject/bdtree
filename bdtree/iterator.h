@@ -4,6 +4,7 @@
 #include <boost/none.hpp>
 #include <algorithm>
 
+#include <bdtree.h>
 #include "primitive_types.h"
 #include "base_types.h"
 #include "util.h"
@@ -189,10 +190,21 @@ namespace bdtree {
         bool operator !=(const bdtree_iterator<Key,Value>& other) const {
             return !(*this == other);
         }
-        const Key& operator *() const {
+        template <typename V = Value>
+        typename std::enable_if<std::is_same<V, bdtree::empty_t>::value, const Key&>::type operator *() const {
             return current_iterator_->first;
         }
-        const Key* operator ->() const {
+
+        template <typename V = Value>
+        typename std::enable_if<!std::is_same<V, bdtree::empty_t>::value, decltype(*current_iterator_)>::type operator *() const {
+            return *current_iterator_;
+        }
+        template <typename V = Value>
+        typename std::enable_if<std::is_same<V, bdtree::empty_t>::value, const Key*>::type operator ->() const {
+            return &(**this);
+        }
+        template <typename V = Value>
+        typename std::enable_if<!std::is_same<V, bdtree::empty_t>::value, decltype(&*current_iterator_)>::type operator ->() const {
             return &(**this);
         }
     };

@@ -63,6 +63,8 @@ enum class search_bound {
     LAST_SMALLER_EQUAL
 };
 
+struct empty_t;
+
 template<typename Key, typename Value>
 struct bdtree_iterator;
 template<typename Key, typename Value>
