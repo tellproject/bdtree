@@ -94,6 +94,7 @@ namespace bdtree {
             assert(bool(high_key_) == bool(right_link_.value));
             assert(low_key_ != high_key_);
             assert(!high_key_ || low_key_ < *high_key_);
+#ifndef NDEBUG
             for (size_t i=0; i< array_.size(); ++i) {
                 if (i > 0)
                     assert(array_[i-1].first < array_[i].first);
@@ -101,6 +102,7 @@ namespace bdtree {
                 assert(!high_key_ || (!(key.first > *high_key_) && !(key.first == *high_key_)));
                 assert(!(key.first < low_key_));
             }
+#endif
         }
     };
 }

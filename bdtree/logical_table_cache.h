@@ -34,14 +34,14 @@ namespace bdtree {
         logical_pointer get_next_logical_ptr() {
             uint64_t zero = 0;
             uint64_t res;
-            auto err = rc_increment_with_new(lpt_.value, (const char*)&zero, sizeof(zero), 1, reinterpret_cast<int64_t*>(&res));
+            __attribute__((unused)) auto err = rc_increment_with_new(lpt_.value, (const char*)&zero, sizeof(zero), 1, reinterpret_cast<int64_t*>(&res));
             assert(err == STATUS_OK);
             return logical_pointer{res};
         }
         physical_pointer get_next_physical_ptr() {
             uint64_t zero = 0;
             uint64_t res;
-            auto err = rc_increment_with_new(nt_.value, (const char*) &zero, sizeof(zero), 1, reinterpret_cast<int64_t*>(&res));
+            __attribute__((unused)) auto err = rc_increment_with_new(nt_.value, (const char*) &zero, sizeof(zero), 1, reinterpret_cast<int64_t*>(&res));
             assert(err == STATUS_OK);
             return physical_pointer{res};
         }

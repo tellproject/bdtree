@@ -20,6 +20,11 @@ public:
     static_assert(sizeof(T) <= 16, "Type is too big");
     static_assert(sizeof(T) > 8, "One should not use double_word_atomic for types smaller than 8");
 
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
     T load() {
         __int128 res = __atomic_load_n(&data, __ATOMIC_SEQ_CST);
         return reinterpret_cast<T&>(res);
@@ -31,6 +36,11 @@ public:
     bool cas(T& expected, T desired) {
         return __atomic_compare_exchange(&data, reinterpret_cast<__int128*>(&expected), reinterpret_cast<__int128*>(&desired), false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
     }
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+
 };
 
 enum class cache_return {

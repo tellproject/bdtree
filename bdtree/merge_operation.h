@@ -204,7 +204,7 @@ public:
                         rm_delta.level = newinner.level;
                         auto data = rm_delta.serialize();
                         physical_pointer rm_pptr = context.cache.get_next_physical_ptr();
-                        auto rm_rc_res = rc_write(context.get_node_table().value, rm_pptr.value_ptr(), rm_pptr.length, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
+                        __attribute__((unused)) auto rm_rc_res = rc_write(context.get_node_table().value, rm_pptr.value_ptr(), rm_pptr.length, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
                         assert(rm_rc_res == STATUS_OK);
                         rc_res = rc_write_with_reject(context.get_ptr_table().value, parent->lptr_.value_ptr(), parent->lptr_.length, rm_pptr.value_ptr(), rm_pptr.length, &rules, &rc_version);
                         if (rc_res != STATUS_OK) {

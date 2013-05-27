@@ -118,7 +118,9 @@ namespace bdtree {
                 return *this;
             }
             auto hkey = *current_->as_leaf()->high_key_;
+#ifndef NDEBUG
             auto old_current = current_;
+#endif
             do {
                 if (set_void_if_after()) {
                     return *this;

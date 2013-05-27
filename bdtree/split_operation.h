@@ -68,7 +68,7 @@ private:
         } else if (nt == node_type_t::LeafNode) {
             leaf_node<Key, Value>* leaf = static_cast<leaf_node<Key, Value>*>(op.result);
             consolidate_typed(leaf, context, delta, split_lptr, split_pptr, rc_version, [&context, leaf](leaf_node<Key, Value>* n){
-                auto rc_res = rc_remove(context.get_node_table().value, leaf->leaf_pptr_.value_ptr(), leaf->leaf_pptr_.length);
+                __attribute__((unused)) auto rc_res = rc_remove(context.get_node_table().value, leaf->leaf_pptr_.value_ptr(), leaf->leaf_pptr_.length);
                 assert(rc_res == STATUS_OK);
                 for (physical_pointer ptr : n->deltas_) {
                     rc_res = rc_remove(context.get_node_table().value, ptr.value_ptr(), ptr.length);
@@ -136,7 +136,7 @@ public:
             rc_res = rc_write(context.get_node_table().value, pptr.value_ptr(), pptr.length, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
             assert(rc_res == STATUS_OK);
             fun = [pptr, &context]() {
-                auto r = rc_remove(context.get_node_table().value, pptr.value_ptr(), pptr.length);
+                __attribute__((unused)) auto r = rc_remove(context.get_node_table().value, pptr.value_ptr(), pptr.length);
                 assert(r == STATUS_OK);
             };
             ramcloud_reject_rules rules;

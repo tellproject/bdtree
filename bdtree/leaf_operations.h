@@ -18,7 +18,7 @@ struct leaf_operation_base {
         if (!consolidated) return;
         for (physical_pointer ptr : ptrs) {
 //            std::cout << "cleaning " << ptr.value << std::endl;
-            auto rc_res = rc_remove(tableid.value, ptr.value_ptr(), ptr.length);
+            __attribute__((unused)) auto rc_res = rc_remove(tableid.value, ptr.value_ptr(), ptr.length);
             assert(rc_res == STATUS_OK);
         }
     }
@@ -114,7 +114,7 @@ bool exec_leaf_operation(const Key& key, logical_table_cache<Key, Value>& cache,
         leaf_node<Key, Value>* leafp = leaf.first->as_leaf();
         if (op.has_conflicts(leafp)) {
             if (lnptr) {
-                auto res = rc_remove(cache.get_node_table().value, pptr.value_ptr(), pptr.length);
+                __attribute__((unused)) auto res = rc_remove(cache.get_node_table().value, pptr.value_ptr(), pptr.length);
                 assert(res == STATUS_OK);
             }
             return false;

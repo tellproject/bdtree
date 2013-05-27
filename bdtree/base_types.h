@@ -63,6 +63,7 @@ public:
 public: // new/delete
     virtual node<Key, Value>* copy() const {
         assert(false);
+        return nullptr;
     }
     void* operator new(std::size_t size) {
         return awesome::malloc(size);

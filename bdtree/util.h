@@ -18,7 +18,7 @@ struct node_delete;
 template<typename Key, typename Value>
 struct node_delete<inner_node<Key, Value> > {
     static void rem(inner_node<Key, Value>& inner, physical_pointer pptr, operation_context<Key, Value>& context) {
-        auto rc_res = rc_remove(context.get_node_table().value, pptr.value_ptr(), pptr.length);
+        __attribute__((unused)) auto rc_res = rc_remove(context.get_node_table().value, pptr.value_ptr(), pptr.length);
         assert(rc_res == STATUS_OK);
     }
 };
@@ -26,7 +26,7 @@ struct node_delete<inner_node<Key, Value> > {
 template<typename Key, typename Value>
 struct node_delete<leaf_node<Key, Value> > {
     static void rem(leaf_node<Key, Value>& leaf, physical_pointer pptr, operation_context<Key, Value>& context) {
-        auto rc_res = rc_remove(context.get_node_table().value, leaf.leaf_pptr_.value_ptr(), leaf.leaf_pptr_.length);
+        __attribute__((unused)) auto rc_res = rc_remove(context.get_node_table().value, leaf.leaf_pptr_.value_ptr(), leaf.leaf_pptr_.length);
         assert(rc_res == STATUS_OK);
         for (physical_pointer ptr : leaf.deltas_) {
             assert(ptr != leaf.leaf_pptr_);
