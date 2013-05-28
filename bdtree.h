@@ -130,6 +130,7 @@ namespace bdtree {
                     std::cout << "found insert_delta with pptr: " << pptr.value << " pointing to " << ins_delta->next.value << std::endl;
                 }
                 counts[uint8_t(node->get_node_type())]++;
+                delete node;
             }
             auto iter = find(null_key<Key>::value());
             auto* last_current = iter.current_;
