@@ -19,6 +19,9 @@ set(CONSOLIDATE_AT "10" CACHE STRING "Number of delta nodes allowed in leaf leve
 set(MAX_NODE_SIZE "2048" CACHE STRING "Maximal size of a node")
 set(MIN_NODE_SIZE "1024" CACHE STRING "Minimal size of a node")
 
+
+SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
+
 if(APPLE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -stdlib=libc++ -Wconversion -fno-omit-frame-pointer -march=native")
 else(APPLE)
@@ -35,7 +38,9 @@ include_directories(.)
 
 #add_definitions(-DDBG_B_TREE)
 
-find_package(Boost 1.48 REQUIRED)
+find_package(Boost 1.48 REQUIRED COMPONENTS system thread filesystem)
+find_package(MongoDB)
+include_directories(${MongoDB_INCLUDE_DIR})
 
 set(SRCS bdtree.h
     bdtree/serialize_policies.h
@@ -58,10 +63,21 @@ set(SRCS bdtree.h
     cramcloud.h
     dummy_cramcloud.cc
     amalloc.h
-    amalloc.cc)
+    amalloc.cc
+    )
 
 set(TEST_SRCS ${SRCS} test.cc)
 set(RAND_TEST_SRCS ${SRCS} rand_test.cc)
+set(BDTREE_SERVER_SRCS ${SRCS}
+    bdtree_server.cc
+    bdtree_server_proc.h
+    bdtree_server_proc.cc
+    mongo_impl.h
+    mongo_impl.cc
+    bdtree_db_impl.h
+    bdtree_db_impl.cc)
 
 add_executable(bdtree_test ${TEST_SRCS})
 add_executable(rand_test ${RAND_TEST_SRCS})
+add_executable(bdtree_server ${BDTREE_SERVER_SRCS})
+target_link_libraries(bdtree_server ${MongoDB_LIBRARIES} ${Boost_LIBRARIES})
