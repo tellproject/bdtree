@@ -92,7 +92,12 @@ namespace bdtree {
             return exec_leaf_operation(key, cache_, tx_id_, op);
         }
 
-        bool insert(const std::pair<Key, Value>& p) {
+        template <typename V = Value>
+        typename std::enable_if<std::is_same<empty_t, V>::value, bool>::type insert(const Key& key) {
+            return insert(key, empty_t{});
+        }
+        template <typename V = Value>
+        typename std::enable_if<!std::is_same<empty_t, V>::value, bool>::type insert(const std::pair<Key, Value>& p) {
             return insert(p.first, p.second);
         }
         bool erase(const Key& key) {
