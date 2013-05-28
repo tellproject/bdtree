@@ -38,8 +38,9 @@ include_directories(.)
 
 #add_definitions(-DDBG_B_TREE)
 
-find_package(Boost 1.48 REQUIRED COMPONENTS system thread filesystem)
+find_package(Boost 1.49 REQUIRED COMPONENTS system thread filesystem)
 find_package(MongoDB)
+find_package(OpenSSL)
 include_directories(${MongoDB_INCLUDE_DIR})
 
 set(SRCS bdtree.h
@@ -80,4 +81,4 @@ set(BDTREE_SERVER_SRCS ${SRCS}
 add_executable(bdtree_test ${TEST_SRCS})
 add_executable(rand_test ${RAND_TEST_SRCS})
 add_executable(bdtree_server ${BDTREE_SERVER_SRCS})
-target_link_libraries(bdtree_server ${MongoDB_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries(bdtree_server ${MongoDB_LIBRARIES} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES})

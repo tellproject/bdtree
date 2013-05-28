@@ -7,6 +7,7 @@
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <mongo/client/dbclient.h>
 #pragma GCC diagnostic pop
+#include <memory>
 
 class mongo_client : public DB {
     mongo::DBClientConnection con;
@@ -20,6 +21,7 @@ public:
              const std::unordered_set<std::string>& fields,
              std::unordered_map<std::string, std::string>& result)  override
     {
+        //std::unique_ptr<mongo::DBClientCursor> cursor;
         return 0;
     }
     int scan(const std::string& table,

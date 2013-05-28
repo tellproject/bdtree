@@ -2,7 +2,6 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
-#include <errmsg.h>
 #include <signal.h>
 #include <string>
 #include <iostream>

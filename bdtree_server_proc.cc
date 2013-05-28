@@ -85,6 +85,8 @@ void server::exec() {
     }
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
 int32_t server::read_int() {
     int32_t res;
     read(fd, &res, sizeof(res));
@@ -97,6 +99,7 @@ int32_t server::read_int() {
 
     return ((int)b1 << 24) + ((int)b2 << 16) + ((int)b3 << 8) + b4;
 }
+#pragma GCC diagnostic push
 
 // A string is 4 bytes big endian int length + the string
 std::string server::read_string() {
