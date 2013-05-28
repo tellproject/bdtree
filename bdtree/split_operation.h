@@ -92,7 +92,6 @@ public:
             auto ntype = parent->node_->get_node_type();
             if (ntype == node_type_t::LeafNode) {
                 fun();
-                delete delta;
                 return;
             } else if (ntype != node_type_t::InnerNode) {
                 assert(false);
@@ -103,7 +102,6 @@ public:
             if (iter->first == delta->right_key) {
                 consolidate_split(split_lptr, split_pptr, delta, split_rc_version, context);
                 fun();
-                delete delta;
                 return;
             }
             if (iter->second != split_lptr) {
@@ -114,13 +112,11 @@ public:
             auto rc_res = rc_read(context.get_ptr_table().value, split_lptr.value_ptr(), split_lptr.length, &buf);
             if (rc_res == STATUS_OBJECT_DOESNT_EXIST) {
                 fun();
-                delete delta;
                 return;
             }
             assert(rc_res == STATUS_OK);
             if (split_pptr != *reinterpret_cast<physical_pointer*>(buf.data)) {
                 fun();
-                delete delta;
                 return;
             }
             size_t nsize = inner->serialized_size();
@@ -153,7 +149,6 @@ public:
                 if (!context.cache.add_entry(nnp, context.tx_id)) {
                     delete nnp;
                 }
-                delete delta;
                 return;
             } else if (rc_res == STATUS_WRONG_VERSION) {
                 delete new_inner;
@@ -281,6 +276,7 @@ public:
         delete right;
         if (rc_res == STATUS_OK) {
             continue_split(nodep->lptr_, split_ptr, rc_version, split, context);
+            delete split;
         } else if (rc_res == STATUS_WRONG_VERSION || rc_res == STATUS_OBJECT_DOESNT_EXIST) {
             if (rc_res == STATUS_WRONG_VERSION) {
                 context.cache.invalidate_if_older(nodep->lptr_, rc_version);
