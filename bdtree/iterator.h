@@ -43,7 +43,7 @@ namespace bdtree {
             static_assert(CONSOLIDATE_AT == 0 && FakeParam == 1, "bdtree_iterator::erase_if_no_newer cannot correctly handle delta chains");
             assert(nl->deltas_.size() == 0);
             auto s = nl->serialized_size();
-            if (s < MIN_NODE_SIZE) {
+            if (s < MIN_NODE_SIZE && current_->lptr_.value != 1) {
                 merge_operation<Key, Value>::execute_merge(current_, leaf, *context_);
                 return erase_result::Merged;
             }
