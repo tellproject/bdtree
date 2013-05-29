@@ -32,29 +32,24 @@ namespace bdtree {
             }
         }
         
+        template <uint FakeParam = 1>
         erase_result erase_if_no_newer() {
             assert(!after());
             leaf_node<Key, Value>* leaf = current_->as_leaf();
-            bool consolidate = leaf->deltas_.size() >= CONSOLIDATE_AT;
             leaf_node<Key, Value>* nl = new leaf_node<Key, Value>(*leaf);
             size_t current_index = current_iterator_ - current_->as_leaf()->array_.begin();
             nl->array_.erase(nl->array_.begin() + current_index);
-            physical_pointer pptr = context_->cache.get_next_physical_ptr();
             std::vector<uint8_t> data;
-            if (consolidate) {
-                data = nl->serialize();
-            } else {
-                delete_delta<Key, Value> dd;
-                dd.key = current_iterator_->first;
-                dd.next = current_->ptr_;
-                data = dd.serialize();
-                nl->deltas_.push_back(pptr);
-            }
+            static_assert(CONSOLIDATE_AT == 0 && FakeParam == 1, "bdtree_iterator::erase_if_no_newer cannot correctly handle delta chains");
+            assert(nl->deltas_.size() == 0);
             auto s = nl->serialized_size();
             if (s < MIN_NODE_SIZE) {
                 merge_operation<Key, Value>::execute_merge(current_, leaf, *context_);
                 return erase_result::Merged;
             }
+            data = nl->serialize();
+            physical_pointer pptr = context_->cache.get_next_physical_ptr();
+            nl->leaf_pptr_ = pptr;
             auto rc_res = rc_write(context_->get_node_table().value, pptr.value_ptr(), pptr.length, reinterpret_cast<char*>(data.data()), data.size());
             assert(rc_res == STATUS_OK);
             ramcloud_reject_rules rules;
@@ -66,11 +61,14 @@ namespace bdtree {
             rc_res = rc_write_with_reject(context_->get_ptr_table().value, current_->lptr_.value_ptr(), current_->lptr_.length, pptr.value_ptr(), pptr.length, &rules, &rc_version);
             if (rc_res == STATUS_WRONG_VERSION || rc_res == STATUS_OBJECT_DOESNT_EXIST) {
                 delete nl;
-                rc_res = rc_remove(context_->get_node_table().value, pptr.value_ptr(), pptr.length);//safe
+                rc_res = rc_remove(context_->get_node_table().value, pptr.value_ptr(), pptr.length);
                 return erase_result::Failed;
             }
             node_pointer<Key, Value>* np = new node_pointer<Key, Value>(current_->lptr_, pptr, rc_version);
             np->node_ = nl;
+            static_assert(CONSOLIDATE_AT == 0 && FakeParam == 1, "bdtree_iterator::erase_if_no_newer cannot correctly handle delta chains");
+            rc_res = rc_remove(context_->get_node_table().value, current_->ptr_.value_ptr(), current_->ptr_.length);
+            assert(rc_res == STATUS_OK);
             if (!context_->cache.add_entry(np, last_tx_id)) {
                 delete np;
                 ++(*this);

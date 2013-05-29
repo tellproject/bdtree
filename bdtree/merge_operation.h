@@ -22,7 +22,8 @@ private:
 
     static node_pointer<Key, Value>* get_left_sibling(logical_pointer lptr, const Key& low_key, context_t& context, int8_t level) {
         key_compare<Key, Value> cmp;
-        context.node_stack.pop();
+        if (context.node_stack.size() > 1)
+            context.node_stack.pop();
         for (;;) {
             auto nodep = fix_stack(low_key, context, search_bound::LAST_SMALLER);
             auto nt = nodep->node_->get_node_type();
@@ -131,10 +132,10 @@ public:
             consolidate(merge_lptr, merge_pptr, merge_rc_version, mergedelta, context);
             return;
         }
-        assert(context.node_stack.size() >= 2);
         physical_pointer pptr = context.cache.get_next_physical_ptr();
         key_compare<Key, Value> cmp;
-        context.node_stack.pop();
+        if (context.node_stack.size() > 1)
+            context.node_stack.pop();
         for (;;) {
             auto parent = fix_stack(mergedelta->right_low_key, context, search_bound::LAST_SMALLER_EQUAL);
             auto ntype = parent->node_->get_node_type();

@@ -175,7 +175,8 @@ node_pointer<Key, Value>* get_next(operation_context<Key, Value>& context, node_
         current = np;
     }
     //3. search for n.high_key_
-    context.node_stack.pop();
+    if (context.node_stack.size() > 1)
+        context.node_stack.pop();
     auto iter = lower_bound_with_context<Key,Value>(*current->as_leaf()->high_key_, context);
     return iter.current_;
 }
