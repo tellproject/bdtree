@@ -66,7 +66,7 @@ namespace bdtree {
             }
             node_pointer<Key, Value>* np = new node_pointer<Key, Value>(current_->lptr_, pptr, rc_version);
             np->node_ = nl;
-            static_assert(CONSOLIDATE_AT == 0 && FakeParam == 1, "bdtree_iterator::erase_if_no_newer cannot correctly handle delta chains");
+            static_assert(CONSOLIDATE_AT == 0 && FakeParam == FakeParam, "bdtree_iterator::erase_if_no_newer cannot correctly handle delta chains");
             rc_res = rc_remove(context_->get_node_table().value, current_->ptr_.value_ptr(), current_->ptr_.length);
             assert(rc_res == STATUS_OK);
             if (!context_->cache.add_entry(np, last_tx_id)) {
