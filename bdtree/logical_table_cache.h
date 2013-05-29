@@ -155,6 +155,7 @@ namespace bdtree {
                     return cache_return::Nop;
                 }
             });
+            awesome::mark_for_deletion(do_delete);
         }
         
         void invalidate_if_older(logical_pointer lptr, uint64_t rc_version) {
@@ -169,8 +170,7 @@ namespace bdtree {
                 }
                 return cache_return::Nop;
             });
-            if (do_delete)
-                awesome::mark_for_deletion(do_delete);
+            awesome::mark_for_deletion(do_delete);
         }
 
         void print_statistics() {

@@ -86,6 +86,7 @@ namespace bdtree {
             auto old_stack = context_.node_stack;
             split_operation<Key, Value>::continue_split(lptr_, lastpptr, rc_version, &node, context_);
             context_.node_stack = old_stack;
+            delete &node;
             return false;
         }
 
@@ -93,6 +94,7 @@ namespace bdtree {
             auto old_stack = context_.node_stack;
             merge_operation<Key, Value>::continue_merge(lptr_, lastpptr, rc_version, &node, context_);
             context_.node_stack = old_stack;
+            delete &node;
             return false;
         }
 
@@ -100,6 +102,7 @@ namespace bdtree {
             auto old_stack = context_.node_stack;
             merge_operation<Key, Value>::continue_merge(lptr_, lastpptr, rc_version, &node, context_);
             context_.node_stack = old_stack;
+            delete &node;
             return false;
         }
         

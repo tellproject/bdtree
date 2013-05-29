@@ -92,7 +92,12 @@ namespace bdtree {
             return exec_leaf_operation(key, cache_, tx_id_, op);
         }
 
-        bool insert(const std::pair<Key, Value>& p) {
+        template <typename V = Value>
+        typename std::enable_if<std::is_same<empty_t, V>::value, bool>::type insert(const Key& key) {
+            return insert(key, empty_t{});
+        }
+        template <typename V = Value>
+        typename std::enable_if<!std::is_same<empty_t, V>::value, bool>::type insert(const std::pair<Key, Value>& p) {
             return insert(p.first, p.second);
         }
         bool erase(const Key& key) {
@@ -125,6 +130,7 @@ namespace bdtree {
                     std::cout << "found insert_delta with pptr: " << pptr.value << " pointing to " << ins_delta->next.value << std::endl;
                 }
                 counts[uint8_t(node->get_node_type())]++;
+                delete node;
             }
             auto iter = find(null_key<Key>::value());
             auto* last_current = iter.current_;
