@@ -18,6 +18,7 @@ cmake_minimum_required(VERSION 2.8)
 set(CONSOLIDATE_AT "10" CACHE STRING "Number of delta nodes allowed in leaf level")
 set(MAX_NODE_SIZE "2048" CACHE STRING "Maximal size of a node")
 set(MIN_NODE_SIZE "1024" CACHE STRING "Minimal size of a node")
+set(BDTREE_FOR_POINT_QUERY TRUE CACHE BOOL "Use the Bd-Tree for point queries")
 
 
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
@@ -40,8 +41,11 @@ include_directories(.)
 
 find_package(Boost 1.49 REQUIRED COMPONENTS system thread filesystem)
 find_package(MongoDB)
-find_package(OpenSSL)
-include_directories(${MongoDB_INCLUDE_DIR})
+if (MongoDB_FOUND)
+    find_package(OpenSSL)
+    include_directories(${MongoDB_INCLUDE_DIR})
+endif (MongoDB_FOUND)
+configure_file(server_config.h.cmake server_config.h)
 
 set(SRCS bdtree.h
     bdtree/serialize_policies.h
@@ -81,4 +85,6 @@ set(BDTREE_SERVER_SRCS ${SRCS}
 add_executable(bdtree_test ${TEST_SRCS})
 add_executable(rand_test ${RAND_TEST_SRCS})
 add_executable(bdtree_server ${BDTREE_SERVER_SRCS})
-target_link_libraries(bdtree_server ${MongoDB_LIBRARIES} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES})
+if (MongoDB_FOUND)
+    target_link_libraries(bdtree_server ${MongoDB_LIBRARIES} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES})
+endif (MongoDB_FOUND)

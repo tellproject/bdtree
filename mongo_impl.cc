@@ -1,5 +1,7 @@
 #include "mongo_impl.h"
 
+#ifdef MongoDB_FOUND
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 #pragma GCC diagnostic ignored "-Wshorten-64-to-32"
@@ -28,7 +30,7 @@ public:
              const std::string& start_key,
              int read_count,
              const std::unordered_set<std::string>& fields,
-             std::unordered_map<std::string, std::string>& result) override
+             std::vector<std::unordered_map<std::string, std::string> >& result) override
     {
         return 0;
     }
@@ -56,3 +58,5 @@ DB* create_mongo_db(const std::string& url)
 {
     return new mongo_client(url);
 }
+
+#endif

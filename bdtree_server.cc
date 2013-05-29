@@ -9,6 +9,8 @@
 #include <thread>
 #include <vector>
 
+#include <server_config.h>
+
 #include "amalloc.h"
 #include "bdtree_server_proc.h"
 #include "cramcloud.h"
@@ -33,6 +35,7 @@ void printhelp() {
     std::cout << '\t' << "-p port    Bind server to port" << std::endl;
     std::cout << '\t' << "-C host    Coordinator host (use RamCloud)" << std::endl;
     std::cout << '\t' << "-M host    MongoDB host (use MongoDB)" << std::endl;
+    std::cout << '\t' << "-i         Init the index" << std::endl;
 }
 
 struct addr_freeer {
@@ -67,7 +70,8 @@ int main(int argc, char* argv[]) {
     bool use_mongo = false;
     std::string port = "8706";
     std::string host, dbhost;
-    while ((ch = getopt(argc, argv, "hH:C:p:M:")) != -1) {
+    bool init = false;
+    while ((ch = getopt(argc, argv, "hH:C:p:M:i")) != -1) {
         switch (ch) {
         case 'h':
             printhelp();
@@ -85,17 +89,45 @@ int main(int argc, char* argv[]) {
             use_mongo = true;
             dbhost = optarg;
             break;
+        case 'i':
+            init = true;
+            break;
         default:
             printhelp();
             return 1;
         }
     }
     std::unique_ptr<DB> connection;
+    std::unique_ptr<bdtree::logical_table_cache<std::string, bdtree::empty_t> > cache;
     if (use_mongo) {
+#ifdef MongoDB_FOUND
         connection.reset(create_mongo_db(dbhost));
+#else
+        std::cerr << "MongoDB-Support was not compiled in" << std::endl;
+        exit(1);
+#endif
     } else {
         init_ram_cloud(dbhost.c_str(), &ralloc, &rdealloc);
-        connection.reset(create_bdtree_db());
+        awesome::allocator alloc;
+        uint64_t data, lpt, nt;
+        if (init) {
+            auto rc_res = rc_create_table("usertable");
+            assert(rc_res == STATUS_OK);
+            rc_res = rc_create_table("lpt");
+            assert(rc_res == STATUS_OK);
+            rc_res = rc_create_table("nt");
+            assert(rc_res == STATUS_OK);
+        }
+        auto rc_res = rc_get_table_id(&data, "usertable");
+        assert(rc_res == STATUS_OK);
+        rc_res = rc_get_table_id(&lpt, "lpt");
+        assert(rc_res == STATUS_OK);
+        rc_res = rc_get_table_id(&nt, "nt");
+        assert(rc_res == STATUS_OK);
+        cache.reset(new bdtree::logical_table_cache<std::string, bdtree::empty_t>(bdtree::logical_pointer_table{lpt}, bdtree::node_table{nt}));
+        uint64_t tx = bdtree::get_next_tx_id();
+        bdtree::map<std::string, bdtree::empty_t> _(*cache, tx, init);
+        connection.reset(create_bdtree_db(*cache, data));
     }
     const char* hname = host == "" ? nullptr : host.c_str();
     std::unique_ptr<addrinfo, addr_freeer> ainfop;
