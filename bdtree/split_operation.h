@@ -65,8 +65,8 @@ private:
         if (nt == node_type_t::InnerNode) {
             inner_node<Key, Value>* inner = static_cast<inner_node<Key, Value>*>(op.result);
             consolidate_typed(inner, context, delta, split_lptr, split_pptr, rc_version, [&context, delta](inner_node<Key, Value>*){
-//                __attribute__((unused)) auto rc_res = rc_remove(context.get_node_table().value, delta->next.value_ptr(), delta->next.length);
-//                assert(rc_res == STATUS_OK);
+                __attribute__((unused)) auto rc_res = rc_remove(context.get_node_table().value, delta->next.value_ptr(), delta->next.length);
+                assert(rc_res == STATUS_OK);
             });
         } else if (nt == node_type_t::LeafNode) {
             leaf_node<Key, Value>* leaf = static_cast<leaf_node<Key, Value>*>(op.result);
