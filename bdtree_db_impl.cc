@@ -79,6 +79,7 @@ class bdtree_client : public DB {
     uint64_t data;
 public:
     bdtree_client(bdtree::logical_table_cache<std::string, bdtree::empty_t>& c, uint64_t d) : cache(c), data(d) {}
+    ~bdtree_client() {}
     int read(const std::string& table,
              const std::string& key,
              const std::unordered_set<std::string>& fields,
@@ -125,7 +126,21 @@ public:
             keys.push_back(*iter);
             ++iter;
         }
-        // TODO: make multiread request here
+        multi_read_request req(uint32_t(keys.size()));
+        for (uint32_t i = 0; i < keys.size(); ++i) {
+            req.push_back(data, keys[i].c_str(), uint16_t(keys[i].size()));
+        }
+        rc_multi_read(req);
+        result.reserve(keys.size());
+        for (uint32_t i = 0; i < keys.size(); ++i) {
+            auto& rbuf = req[i].rbuf;
+            auto length = rbuf->getTotalLength();
+            std::unique_ptr<uint8_t[]> buf(new uint8_t[length]);
+            req[i].rbuf->copy(0, length, buf.get());
+            std::unordered_map<std::string, std::string> resmap;
+            deserialize(resmap, buf.get());
+            result.emplace_back(std::move(resmap));
+        }
         return 0;
     }
     int update(const std::string& table,

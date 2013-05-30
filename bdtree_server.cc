@@ -10,10 +10,10 @@
 #include <vector>
 
 #include <server_config.h>
+#include <cramcloud.h>
 
 #include "amalloc.h"
 #include "bdtree_server_proc.h"
-#include "cramcloud.h"
 #include "bdtree_db_impl.h"
 #include "mongo_impl.h"
 
@@ -32,7 +32,7 @@ void printhelp() {
     std::cout << "Usage: " << std::endl;
     std::cout << '\t' << "-h         Print this help message" << std::endl;
     std::cout << '\t' << "-H host    Bind server to host (default = nullptr)" << std::endl;
-    std::cout << '\t' << "-p port    Bind server to port" << std::endl;
+    std::cout << '\t' << "-p port    Bind server to port (default 8706)" << std::endl;
     std::cout << '\t' << "-C host    Coordinator host (use RamCloud)" << std::endl;
     std::cout << '\t' << "-M host    MongoDB host (use MongoDB)" << std::endl;
     std::cout << '\t' << "-i         Init the index" << std::endl;
@@ -97,11 +97,11 @@ int main(int argc, char* argv[]) {
             return 1;
         }
     }
-    std::unique_ptr<DB> connection;
+    std::function<DB*()> create_con;
     std::unique_ptr<bdtree::logical_table_cache<std::string, bdtree::empty_t> > cache;
     if (use_mongo) {
 #ifdef MongoDB_FOUND
-        connection.reset(create_mongo_db(dbhost));
+        create_con = [dbhost]() { return create_mongo_db(dbhost); };
 #else
         std::cerr << "MongoDB-Support was not compiled in" << std::endl;
         exit(1);
@@ -127,14 +127,14 @@ int main(int argc, char* argv[]) {
         cache.reset(new bdtree::logical_table_cache<std::string, bdtree::empty_t>(bdtree::logical_pointer_table{lpt}, bdtree::node_table{nt}));
         uint64_t tx = bdtree::get_next_tx_id();
         bdtree::map<std::string, bdtree::empty_t> _(*cache, tx, init);
-        connection.reset(create_bdtree_db(*cache, data));
+        create_con = [&cache, data]() { return create_bdtree_db(*cache, data); };
     }
     const char* hname = host == "" ? nullptr : host.c_str();
     std::unique_ptr<addrinfo, addr_freeer> ainfop;
     addrinfo* ainfo;
     {
         int err = getaddrinfo(hname, port.c_str(), nullptr, &ainfo);
-        if (!err) {
+        if (err) {
             std::cerr << gai_strerror(err) << std::endl;
             return 1;
         }
@@ -145,13 +145,16 @@ int main(int argc, char* argv[]) {
         std::cerr << "Could not create socket" << std::endl;
         return 1;
     }
+    int iSetOption = 1;
+        setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char*) &iSetOption,
+                        sizeof(iSetOption));
     int err = bind(server_socket, ainfo->ai_addr, ainfo->ai_addrlen);
-    if (!err) {
+    if (err) {
         std::cerr << "bind failed: " << strerror(errno) << std::endl;
         return 1;
     }
     err = listen(server_socket, 5);
-    if (!err) {
+    if (err) {
         std::cerr << "listen failed: " << strerror(errno) << std::endl;
         return 1;
     }
@@ -164,7 +167,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "Accept failed: " << strerror(errno);
             continue;
         }
-        threads.push_back(std::thread([fd, &connection](){server::run(fd, *connection);}));
+        threads.push_back(std::thread([fd, &create_con](){server::run(fd, create_con());}));
     }
     return 0;
 }

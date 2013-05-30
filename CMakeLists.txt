@@ -33,6 +33,25 @@ set(UTIL_DIR "${CMAKE_SOURCE_DIR}/../util")
 message(STATUS "Set the util directory to ${UTIL_DIR}")
 include_directories(${UTIL_DIR})
 
+set(RAMCLOUD_DIR "${CMAKE_SOURCE_DIR}/../../ramcloud" CACHE PATH "Path to the RamCloud source directory")
+set(RAMCLOUD_BINARY_DIR "${RAMCLOUD_DIR}/obj.master" CACHE PATH "Path to the RAMCloud binary directory")
+message(STATUS "Looking for RamCloud in ${RAMCLOUD_DIR}")
+
+include_directories(${RAMCLOUD_BINARY_DIR})
+include_directories(${RAMCLOUD_DIR}/src)
+include_directories(${RAMCLOUD_DIR}/logcabin)
+include_directories(${RAMCLOUD_DIR}/gtest/include)
+
+set(CRAMCLOUD_DIR "${CMAKE_SOURCE_DIR}/../cramcloud" CACHE PATH "Path to the C-RamCloud source directory")
+set(CRAMCLOUD_BINARY_DIR "${CRAMCLOUD_DIR}/build" CACHE PATH "Path to the C-RAMCloud binary directory")
+message(STATUS "Looking for CRamCloud in ${CRAMCLOUD_DIR}")
+include_directories(${CRAMCLOUD_DIR})
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CRAMCLOUD_DIR}/cmake)
+find_package(Protobuf REQUIRED)
+find_package(Ibverbs REQUIRED)
+find_package(PCRECPP REQUIRED)
+
 configure_file(bdtree/config.h.cmake bdtree/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(.)
@@ -65,8 +84,6 @@ set(SRCS bdtree.h
     bdtree/merge_operation.h
     bdtree/acache.h
     bdtree.cc
-    cramcloud.h
-    dummy_cramcloud.cc
     amalloc.h
     amalloc.cc
     )
@@ -83,8 +100,22 @@ set(BDTREE_SERVER_SRCS ${SRCS}
     bdtree_db_impl.cc)
 
 add_executable(bdtree_test ${TEST_SRCS})
-add_executable(rand_test ${RAND_TEST_SRCS})
+#add_executable(rand_test ${RAND_TEST_SRCS})
 add_executable(bdtree_server ${BDTREE_SERVER_SRCS})
+set(to_link
+    pthread
+            ${Boost_LIBRARIES}
+            ${MySQL_LIBRARY}
+            ${MySQLpp_LIBRARY}
+#            ${CRAMCLOUD_BINARY_DIR}/libdummy_cramcloud.a
+            ${CRAMCLOUD_BINARY_DIR}/libcramcloud.a
+            ${RAMCLOUD_BINARY_DIR}/libramcloud.a
+            ${PROTOBUF_LIBRARIES}
+            ${Ibverbs_LIBRARY}
+            ${PCRECPP_LIBRARY}
+            rt)
+target_link_libraries(bdtree_test ${to_link})
 if (MongoDB_FOUND)
-    target_link_libraries(bdtree_server ${MongoDB_LIBRARIES} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES})
+    set(to_link ${to_link} ${MongoDB_LIBRARIES} ${OPENSSL_LIBRARIES})
 endif (MongoDB_FOUND)
+target_link_libraries(bdtree_server ${to_link})
