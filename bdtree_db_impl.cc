@@ -97,11 +97,15 @@ public:
 #endif
         ramcloud_buffer_t buf;
         auto rc_res = rc_read(data, key.c_str(), uint16_t(key.size()), &buf);
-        assert(rc_res);
+        assert(rc_res == STATUS_OK);
         std::unordered_map<std::string, std::string> res;
         deserialize(res, buf.data);
-        for (const auto& f : fields) {
-            result.insert(std::make_pair(f, res[f]));
+        if (fields.empty()) {
+            result = std::move(res);
+        } else {
+            for (const auto& f : fields) {
+                result.emplace(f, res[f]);
+            }
         }
         return 0;
     }
@@ -139,7 +143,15 @@ public:
             req[i].rbuf->copy(0, length, buf.get());
             std::unordered_map<std::string, std::string> resmap;
             deserialize(resmap, buf.get());
-            result.emplace_back(std::move(resmap));
+            if (fields.empty()) {
+                result.emplace_back(std::move(resmap));
+            } else {
+                decltype(resmap) res;
+                for (const auto& f : fields) {
+                    res.emplace(f, resmap[f]);
+                    result.emplace_back(std::move(resmap));
+                }
+            }
         }
         return 0;
     }
@@ -159,7 +171,7 @@ public:
 #endif
         ramcloud_buffer_t buf;
         auto rc_res = rc_read(data, key.c_str(), uint16_t(key.size()), &buf);
-        assert(rc_res);
+        assert(rc_res == STATUS_OK);
         std::unordered_map<std::string, std::string> res;
         deserialize(res, buf.data);
         for (const auto& p : values) {
