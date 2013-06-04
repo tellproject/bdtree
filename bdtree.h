@@ -44,27 +44,21 @@ namespace bdtree {
         {
             if (init) {
                 // root node
-                uint64_t zero = 0;
                 physical_pointer one_pptr{1};
                 logical_pointer one_lptr{1};
                 ramcloud_reject_rules r;
                 r.exists = 1;
                 //write 1 into node counter
-                auto err = rc_write_with_reject(cache_.get_node_table().value, reinterpret_cast<const char*>(&zero), sizeof(zero), reinterpret_cast<const char*>(&one_pptr), sizeof(one_pptr), &r, nullptr);
-                if (err == STATUS_OBJECT_EXISTS) {
-                    return;
-                }
+                counter node_counter(cache_.get_node_table().value);
+                node_counter.init(1);
                 //write 1 into lptr counter
-                err = rc_write_with_reject(cache_.get_ptr_table().value, reinterpret_cast<const char*>(&zero), sizeof(zero), reinterpret_cast<const char*>(&one_pptr), sizeof(one_pptr), &r, nullptr);
-                if (err == STATUS_OBJECT_EXISTS) {
-                    return;
-                }
-                assert(err == STATUS_OK);
+                counter ptr_counter(cache_.get_ptr_table().value);
+                ptr_counter.init(1);
                 leaf_node<Key, Value>* node = new leaf_node<Key, Value>(one_pptr);
                 node->low_key_ = null_key<Key>::value();
                 auto ser = node->serialize();
                 //write root node at pptr{1}
-                err = rc_write(cache_.get_node_table().value, one_pptr.value_ptr(), one_pptr.length, reinterpret_cast<const char*>(ser.data()), uint32_t(ser.size()));
+                auto err = rc_write_with_reject(cache_.get_node_table().value, one_pptr.value_ptr(), one_pptr.length, reinterpret_cast<const char*>(ser.data()), uint32_t(ser.size()),&ramcloud_reject_if_exists, nullptr);
                 assert(err == STATUS_OK);
                 // ptr to root (lptr{1} -> pptr{1})
                 uint64_t rc_version;
@@ -111,11 +105,9 @@ namespace bdtree {
         }
 
         void print_statistics() {
-            physical_pointer zero{0};
             ramcloud_buffer buf;
-            rc_read(cache_.get_node_table().value, zero.value_ptr(), zero.length, &buf);
-            assert(buf.length == 8);
-            uint64_t max_node = *reinterpret_cast<uint64_t*>(buf.data);
+            counter node_counter(cache_.get_node_table().value);
+            uint64_t max_node = node_counter.get_remote_value();
             std::vector<uint64_t> counts(uint8_t(node_type_t::MergeDelta) + 1);
             for (uint64_t i = 1; i <= max_node ; ++i) {
                 physical_pointer pptr{i};

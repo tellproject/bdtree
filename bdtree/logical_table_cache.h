@@ -8,14 +8,20 @@
 #include <cramcloud.h>
 #include "concurrent_map.h"
 #include "acache.h"
+#include "counter.h"
 
 namespace bdtree {
 	template<typename Key, typename Value>
     struct logical_table_cache {
         logical_pointer_table lpt_;
         node_table nt_;
+        counter lptr_counter_;
+        counter node_counter_;
     public:
-        explicit logical_table_cache(logical_pointer_table ltid, node_table ntid) : lpt_(ltid), nt_(ntid) {}
+        explicit logical_table_cache(logical_pointer_table ltid, node_table ntid)
+            : lpt_(ltid), nt_(ntid), lptr_counter_(ltid.value), node_counter_(ntid.value) {
+
+        }
         ~logical_table_cache() {
             map_.for_each([](logical_pointer lptr, node_pointer<Key, Value>* e) {
                 delete e;
@@ -32,18 +38,10 @@ namespace bdtree {
         logical_pointer_table get_ptr_table() const { return lpt_; }
         node_table get_node_table() const { return nt_; }
         logical_pointer get_next_logical_ptr() {
-            uint64_t zero = 0;
-            uint64_t res;
-            __attribute__((unused)) auto err = rc_increment_with_new(lpt_.value, (const char*)&zero, sizeof(zero), 1, reinterpret_cast<int64_t*>(&res));
-            assert(err == STATUS_OK);
-            return logical_pointer{res};
+            return logical_pointer{lptr_counter_.get_next()};
         }
         physical_pointer get_next_physical_ptr() {
-            uint64_t zero = 0;
-            uint64_t res;
-            __attribute__((unused)) auto err = rc_increment_with_new(nt_.value, (const char*) &zero, sizeof(zero), 1, reinterpret_cast<int64_t*>(&res));
-            assert(err == STATUS_OK);
-            return physical_pointer{res};
+            return physical_pointer{node_counter_.get_next()};
         }
         node_pointer<Key, Value>* get_from_cache(logical_pointer lptr, operation_context<Key, Value>& context) {
             auto tx_id = context.tx_id;

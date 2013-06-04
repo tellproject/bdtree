@@ -14,6 +14,8 @@ int main() {
     init_ram_cloud("", &rc_alloc_fun, &rc_dealloc_fun);
     auto err = rc_create_table("pointer_table");
     assert(err == STATUS_OK);
+    err = rc_create_table("counter");
+    assert(err == STATUS_OK);
     uint64_t pointer_table_id;
     err = rc_get_table_id(&pointer_table_id, "pointer_table");
     assert(err == STATUS_OK);
