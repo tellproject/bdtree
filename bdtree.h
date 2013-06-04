@@ -59,7 +59,12 @@ namespace bdtree {
                 auto ser = node->serialize();
                 //write root node at pptr{1}
                 auto err = rc_write_with_reject(cache_.get_node_table().value, one_pptr.value_ptr(), one_pptr.length, reinterpret_cast<const char*>(ser.data()), uint32_t(ser.size()),&ramcloud_reject_if_exists, nullptr);
-                assert(err == STATUS_OK);
+                if (err != STATUS_OK){
+                    assert(err == STATUS_OBJECT_EXISTS);
+                    delete node;
+                    return;
+                }
+
                 // ptr to root (lptr{1} -> pptr{1})
                 uint64_t rc_version;
                 auto last_tx_id = get_last_tx_id();
