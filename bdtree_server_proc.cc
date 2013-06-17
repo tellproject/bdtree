@@ -14,6 +14,8 @@
 
 namespace {
 
+const uint BUFFERSIZE = 1024*2048;
+
 enum class server_op : char {
     Read = 1,
     Scan,
@@ -27,15 +29,16 @@ enum class server_op : char {
 
 class connection {
     int fd;
-    uint8_t buf[2048];
+    uint8_t buf[BUFFERSIZE];
     uint8_t* pos;
     uint8_t* rpos;
     uint8_t* end;
-    uint8_t send_buf[2048];
+    uint8_t* send_end;
+    uint8_t send_buf[BUFFERSIZE];
     uint8_t* spos;
 public:
     connection(int fd)
-        : fd(fd), pos(buf), rpos(buf), end(buf + 2048), spos(send_buf) {}
+        : fd(fd), pos(buf), rpos(buf), end(buf + BUFFERSIZE), send_end(send_buf + BUFFERSIZE), spos(send_buf) {}
     ~connection() { close(fd); }
 
     bool fill_buf(ssize_t size)
@@ -128,7 +131,10 @@ public:
         b4 = ( i >>24 ) & 255;
 
         int32_t to_send = ((int32_t)b1 << 24) + ((int32_t)b2 << 16) + ((int32_t)b3 << 8) + b4;
-        if (spos - send_buf <= 2048 - sizeof(int32_t)) flush();
+        if (spos + sizeof(uint32_t) >= send_end) {
+            std::cout << "buffer full int" << std::endl;
+            flush();
+        }
         memcpy(spos, &to_send, sizeof(int32_t));
         spos += sizeof(int32_t);
     }
@@ -137,10 +143,12 @@ public:
     {
         int32_t size = int32_t(s.size());
         send_int(size);
-        if (spos - send_buf <= 2048 - size)
+        if (spos + size >= send_end) {
+            std::cout << "buffer full string" << std::endl;
             flush();
+        }
         const char* arr = s.c_str();
-        if (size > 2048) {
+        if (size > BUFFERSIZE) {
             ssize_t r = 0;
             while (r < size) {
                 r += send(fd, arr + r, size - r, 0);

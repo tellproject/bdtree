@@ -24,6 +24,7 @@ void on_exit(int sig) {
     if (server_socket) {
         close(server_socket);
     }
+    stop_ram_cloud();
     exit(0);
 }
 }
@@ -67,6 +68,7 @@ int main(int argc, char* argv[]) {
     signal(SIGKILL, &on_exit);
     signal(SIGHUP, &on_exit);
     signal(SIGQUIT, &on_exit);
+    signal(SIGINT, &on_exit);
     int ch;
     bool use_mongo = false;
     std::string port = "8706";
