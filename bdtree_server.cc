@@ -36,6 +36,7 @@ void printhelp() {
     std::cout << '\t' << "-C host    Coordinator host (use RamCloud)" << std::endl;
     std::cout << '\t' << "-M host    MongoDB host (use MongoDB)" << std::endl;
     std::cout << '\t' << "-i         Init the index" << std::endl;
+    std::cout << '\t' << "-s span    the tablespan to use when creating RC tables" << std::endl;
 }
 
 struct addr_freeer {
@@ -71,7 +72,8 @@ int main(int argc, char* argv[]) {
     std::string port = "8706";
     std::string host, dbhost;
     bool init = false;
-    while ((ch = getopt(argc, argv, "hH:C:p:M:i")) != -1) {
+    int span = 1;
+    while ((ch = getopt(argc, argv, "hH:C:p:M:is::")) != -1) {
         switch (ch) {
         case 'h':
             printhelp();
@@ -92,6 +94,9 @@ int main(int argc, char* argv[]) {
         case 'i':
             init = true;
             break;
+        case 's':
+            span = atoi(optarg);
+            break;
         default:
             printhelp();
             return 1;
@@ -111,11 +116,12 @@ int main(int argc, char* argv[]) {
         awesome::allocator alloc;
         uint64_t data, lpt, nt;
         if (init) {
-            auto rc_res = rc_create_table("usertable");
+            //TODO: span
+            auto rc_res = rc_create_table_with_span("usertable", span);
             assert(rc_res == STATUS_OK);
-            rc_res = rc_create_table("lpt");
+            rc_res = rc_create_table_with_span("lpt", span);
             assert(rc_res == STATUS_OK);
-            rc_res = rc_create_table("nt");
+            rc_res = rc_create_table_with_span("nt", span);
             assert(rc_res == STATUS_OK);
         }
         auto rc_res = rc_get_table_id(&data, "usertable");
