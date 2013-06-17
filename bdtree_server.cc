@@ -119,6 +119,8 @@ int main(int argc, char* argv[]) {
             //TODO: span
             auto rc_res = rc_create_table_with_span("usertable", span);
             assert(rc_res == STATUS_OK);
+            rc_res = rc_create_table_with_span("counter", span);
+            assert(rc_res == STATUS_OK);
             rc_res = rc_create_table_with_span("lpt", span);
             assert(rc_res == STATUS_OK);
             rc_res = rc_create_table_with_span("nt", span);
