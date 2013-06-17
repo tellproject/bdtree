@@ -62,6 +62,19 @@ void rdealloc(uint8_t* ptr) {
     delete[] ptr;
 }
 
+int pin_thread_except(int core_id) {
+    int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    for (uint16_t j = 5; j < num_cores; j++) {
+        if(j != core_id)
+            CPU_SET(j, &cpuset);
+    }
+
+    return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+}
+
 int main(int argc, char* argv[]) {
     awesome::init();
     signal(SIGTERM, &on_exit);
@@ -114,7 +127,7 @@ int main(int argc, char* argv[]) {
         exit(1);
 #endif
     } else {
-        init_ram_cloud(dbhost.c_str(), &ralloc, &rdealloc);
+        init_ram_cloud_on_core(dbhost.c_str(), &ralloc, &rdealloc, 0);
         awesome::allocator alloc;
         uint64_t data, lpt, nt;
         if (init) {
@@ -177,7 +190,10 @@ int main(int argc, char* argv[]) {
             std::cerr << "Accept failed: " << strerror(errno);
             continue;
         }
-        threads.push_back(std::thread([fd, &create_con](){server::run(fd, create_con());}));
+        threads.emplace_back([fd, &create_con](){
+            pin_thread_except(0);
+            server::run(fd, create_con());
+        });
     }
     return 0;
 }
