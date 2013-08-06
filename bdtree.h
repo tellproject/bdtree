@@ -26,7 +26,10 @@
 
 namespace bdtree {
 
-    struct empty_t {};
+    struct empty_t {
+        bool operator==(const empty_t &) {return true;}
+        bool operator!=(const empty_t &) {return false;}
+    };
     
     template<typename Key, typename Value>
     class map

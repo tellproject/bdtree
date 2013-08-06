@@ -40,7 +40,12 @@ struct insert_operation : public leaf_operation_base<Key, Value> {
 
     std::vector<uint8_t> operator() (const node_pointer<Key, Value>* nptr, leaf_node<Key, Value>& ln, physical_pointer pptr) {
         auto iter = std::lower_bound(ln.array_.begin(), ln.array_.end(), key, comp);
-        ln.array_.insert(iter, std::make_pair(key, value));
+        //prevent the exact same entry from being inserted twice, just rewrite the same record
+        if (iter == ln.array_.end()
+                || iter->second != value
+                || iter->first != key) {
+            ln.array_.insert(iter, std::make_pair(key, value));
+        }
         auto leafp = nptr->as_leaf();
         auto deltasize = leafp->deltas_.size();
         if (deltasize + 1 >= CONSOLIDATE_AT) {
