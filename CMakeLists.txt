@@ -17,7 +17,7 @@ cmake_minimum_required(VERSION 2.8)
 
 set(CONSOLIDATE_AT "10" CACHE STRING "Number of delta nodes allowed in leaf level")
 set(MAX_NODE_SIZE "2048" CACHE STRING "Maximal size of a node")
-set(MIN_NODE_SIZE "1024" CACHE STRING "Minimal size of a node")
+set(MIN_NODE_SIZE "512" CACHE STRING "Minimal size of a node")
 set(BDTREE_FOR_POINT_QUERY TRUE CACHE BOOL "Use the Bd-Tree for point queries")
 
 

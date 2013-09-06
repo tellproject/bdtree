@@ -24,6 +24,7 @@ void on_exit(int sig) {
     if (server_socket) {
         close(server_socket);
     }
+    stop_ram_cloud();
     exit(0);
 }
 }
@@ -36,6 +37,7 @@ void printhelp() {
     std::cout << '\t' << "-C host    Coordinator host (use RamCloud)" << std::endl;
     std::cout << '\t' << "-M host    MongoDB host (use MongoDB)" << std::endl;
     std::cout << '\t' << "-i         Init the index" << std::endl;
+    std::cout << '\t' << "-s span    the tablespan to use when creating RC tables" << std::endl;
 }
 
 struct addr_freeer {
@@ -60,18 +62,33 @@ void rdealloc(uint8_t* ptr) {
     delete[] ptr;
 }
 
+int pin_thread_except(int core_id) {
+    int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    for (uint16_t j = 5; j < num_cores; j++) {
+        if(j != core_id)
+            CPU_SET(j, &cpuset);
+    }
+
+    return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+}
+
 int main(int argc, char* argv[]) {
     awesome::init();
     signal(SIGTERM, &on_exit);
     signal(SIGKILL, &on_exit);
     signal(SIGHUP, &on_exit);
     signal(SIGQUIT, &on_exit);
+    signal(SIGINT, &on_exit);
     int ch;
     bool use_mongo = false;
     std::string port = "8706";
     std::string host, dbhost;
     bool init = false;
-    while ((ch = getopt(argc, argv, "hH:C:p:M:i")) != -1) {
+    int span = 1;
+    while ((ch = getopt(argc, argv, "hH:C:p:M:is::")) != -1) {
         switch (ch) {
         case 'h':
             printhelp();
@@ -92,6 +109,9 @@ int main(int argc, char* argv[]) {
         case 'i':
             init = true;
             break;
+        case 's':
+            span = atoi(optarg);
+            break;
         default:
             printhelp();
             return 1;
@@ -107,15 +127,18 @@ int main(int argc, char* argv[]) {
         exit(1);
 #endif
     } else {
-        init_ram_cloud(dbhost.c_str(), &ralloc, &rdealloc);
+        init_ram_cloud_on_core(dbhost.c_str(), &ralloc, &rdealloc, 0);
         awesome::allocator alloc;
         uint64_t data, lpt, nt;
         if (init) {
-            auto rc_res = rc_create_table("usertable");
+            //TODO: span
+            auto rc_res = rc_create_table_with_span("usertable", span);
             assert(rc_res == STATUS_OK);
-            rc_res = rc_create_table("lpt");
+            rc_res = rc_create_table_with_span("counter", span);
             assert(rc_res == STATUS_OK);
-            rc_res = rc_create_table("nt");
+            rc_res = rc_create_table_with_span("lpt", span);
+            assert(rc_res == STATUS_OK);
+            rc_res = rc_create_table_with_span("nt", span);
             assert(rc_res == STATUS_OK);
         }
         auto rc_res = rc_get_table_id(&data, "usertable");
@@ -167,7 +190,10 @@ int main(int argc, char* argv[]) {
             std::cerr << "Accept failed: " << strerror(errno);
             continue;
         }
-        threads.push_back(std::thread([fd, &create_con](){server::run(fd, create_con());}));
+        threads.emplace_back([fd, &create_con](){
+            pin_thread_except(0);
+            server::run(fd, create_con());
+        });
     }
     return 0;
 }
