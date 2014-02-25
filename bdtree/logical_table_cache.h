@@ -19,8 +19,9 @@ namespace bdtree {
         counter node_counter_;
     public:
         explicit logical_table_cache(logical_pointer_table ltid, node_table ntid)
-            : lpt_(ltid), nt_(ntid), lptr_counter_(ltid.value), node_counter_(ntid.value) {
-
+            : lpt_(ltid), nt_(ntid), lptr_counter_(), node_counter_() {
+                lptr_counter_.setProperties(ltid.value);
+                node_counter_.setProperties(ntid.value);
         }
         ~logical_table_cache() {
             map_.for_each([](logical_pointer lptr, node_pointer<Key, Value>* e) {

@@ -30,7 +30,7 @@ namespace bdtree {
         bool operator==(const empty_t &) {return true;}
         bool operator!=(const empty_t &) {return false;}
     };
-    
+
     template<typename Key, typename Value>
     class map
     {
@@ -51,12 +51,13 @@ namespace bdtree {
                 logical_pointer one_lptr{1};
                 ramcloud_reject_rules r;
                 r.exists = 1;
-                //write 1 into node counter
-                counter node_counter(cache_.get_node_table().value);
-                node_counter.init(1);
-                //write 1 into lptr counter
-                counter ptr_counter(cache_.get_ptr_table().value);
-                ptr_counter.init(1);
+                //write 1 into node counter and lptr counter
+                counter cnt;
+                cnt.setProperties(cache_.get_node_table().value);
+                cnt.initCounterValue(1);
+                cnt.setProperties(cache_.get_ptr_table().value);
+                cnt.initCounterValue(1);
+
                 leaf_node<Key, Value>* node = new leaf_node<Key, Value>(one_pptr);
                 node->low_key_ = null_key<Key>::value();
                 auto ser = node->serialize();
@@ -107,7 +108,7 @@ namespace bdtree {
             delete_operation<Key, Value> op(key, comp);
             return exec_leaf_operation(key, cache_, tx_id_, op);
         }
-        
+
         bool remove_if_unmodified(iterator& iter) {
             return iter.erase_if_no_newer() == erase_result::Success;
         }

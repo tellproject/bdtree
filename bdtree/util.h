@@ -119,11 +119,11 @@ node_pointer<Key, Value>* fix_stack(const Key& key, operation_context<Key, Value
     }};
 #endif
     for (;;) {
-        assert(!context.node_stack.empty());
         auto lptr = context.node_stack.top();
         np = context.cache.get_without_cache(lptr, context);
         if (np == nullptr) {
             context.node_stack.pop();
+            assert(!context.node_stack.empty());
             continue;
         }
         auto node_type = np->node_->get_node_type();
@@ -139,6 +139,7 @@ node_pointer<Key, Value>* fix_stack(const Key& key, operation_context<Key, Value
             assert(false);
         }
         context.node_stack.pop();
+        assert(!context.node_stack.empty());
     }
 }
 
