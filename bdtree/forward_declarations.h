@@ -5,7 +5,7 @@ namespace bdtree {
 template<typename Key, typename Value>
 struct node;
 
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename Backend>
 struct logical_table_cache;
 
 template<template<typename, typename> class T, typename Key, typename Value>
@@ -51,11 +51,11 @@ using merge_delta = serializable_node<merge_delta_t, Key, Value>;
 
 template<typename Key, typename Value>
 struct operation;
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename Backend>
 struct resolve_operation;
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename Backend>
 struct split_operation;
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename Backend>
 struct merge_operation;
 
 enum class search_bound {
@@ -65,14 +65,14 @@ enum class search_bound {
 
 struct empty_t;
 
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename Backend>
 struct bdtree_iterator;
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename Backend>
 struct operation_context;
 template<typename ForwardIt, typename T, typename Compare>
 ForwardIt last_smaller_equal(ForwardIt first, ForwardIt last, const T& value, Compare cmp);
 template<typename ForwardIt, typename T, typename Compare>
 ForwardIt last_smaller(ForwardIt first, ForwardIt last, const T& value, Compare cmp);
-template<typename Key, typename Value>
-bdtree_iterator<Key, Value> lower_bound_with_context(const Key & key, operation_context<Key, Value>& context, search_bound bound = search_bound::LAST_SMALLER_EQUAL);
+template<typename Key, typename Value, typename Backend>
+bdtree_iterator<Key, Value, Backend> lower_bound_with_context(const Key & key, operation_context<Key, Value, Backend>& context, search_bound bound = search_bound::LAST_SMALLER_EQUAL);
 }

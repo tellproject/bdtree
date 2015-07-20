@@ -1,28 +1,21 @@
 #pragma once
+
+#include <bdtree/forward_declarations.h>
+#include <bdtree/primitive_types.h>
+#include <bdtree/base_types.h>
+#include <bdtree/acache.h>
+#include <bdtree/error_code.h>
+
+#include <crossbow/allocator.hpp>
+
 #include <algorithm>
 #include <iostream>
 
-#include "forward_declarations.h"
-#include "primitive_types.h"
-#include "base_types.h"
-#include <cramcloud.h>
-#include "concurrent_map.h"
-#include "acache.h"
-#include "counter.h"
-
 namespace bdtree {
-	template<typename Key, typename Value>
+    template<typename Key, typename Value, typename Backend>
     struct logical_table_cache {
-        logical_pointer_table lpt_;
-        node_table nt_;
-        counter lptr_counter_;
-        counter node_counter_;
     public:
-        explicit logical_table_cache(logical_pointer_table ltid, node_table ntid)
-            : lpt_(ltid), nt_(ntid), lptr_counter_(), node_counter_() {
-                lptr_counter_.setProperties(ltid.value);
-                node_counter_.setProperties(ntid.value);
-        }
+        logical_table_cache() = default;
         ~logical_table_cache() {
             map_.for_each([](logical_pointer lptr, node_pointer<Key, Value>* e) {
                 delete e;
@@ -36,15 +29,8 @@ namespace bdtree {
     private:
         cache<Key, Value> map_;
     public:
-        logical_pointer_table get_ptr_table() const { return lpt_; }
-        node_table get_node_table() const { return nt_; }
-        logical_pointer get_next_logical_ptr() {
-            return logical_pointer{lptr_counter_.get_next()};
-        }
-        physical_pointer get_next_physical_ptr() {
-            return physical_pointer{node_counter_.get_next()};
-        }
-        node_pointer<Key, Value>* get_from_cache(logical_pointer lptr, operation_context<Key, Value>& context) {
+        node_pointer<Key, Value>* get_from_cache(logical_pointer lptr,
+                operation_context<Key, Value, Backend>& context) {
             auto tx_id = context.tx_id;
             context.tx_id = 0;
             auto ret = get_current_from_cache(lptr, context);
@@ -52,7 +38,8 @@ namespace bdtree {
             return ret;
         }
 
-        node_pointer<Key, Value>* get_current_from_cache(logical_pointer lptr, operation_context<Key, Value>& context) {
+        node_pointer<Key, Value>* get_current_from_cache(logical_pointer lptr,
+                operation_context<Key, Value, Backend>& context) {
             assert(lptr.value != 0);
             auto res = map_.at(lptr);
             if (res.first && res.second->last_tx_id_.load() >= context.tx_id && res.second->resolve(context))
@@ -60,18 +47,19 @@ namespace bdtree {
             return get_without_cache(lptr, context);
         }
 
-        node_pointer<Key, Value>* get_without_cache(logical_pointer lptr, operation_context<Key,Value>& context) {
+        node_pointer<Key, Value>* get_without_cache(logical_pointer lptr,
+                    operation_context<Key,Value, Backend>& context) {
             bool resolve_succ = false;
             node_pointer<Key, Value>* result;
             while (!resolve_succ) {
                 auto txid = get_last_tx_id();
-                ramcloud_buffer buf;
-                uint64_t rc_version;
-                auto err = rc_read_versioned(lpt_.value, (const char*) &lptr.value, sizeof(lptr.value), &buf, &rc_version);
-                if (err == STATUS_OBJECT_DOESNT_EXIST)
+                auto& ptr_table = context.get_ptr_table();
+                std::error_code ec;
+                auto pptr = ptr_table.read(lptr, ec);
+                if (ec == error::object_doesnt_exist)
                     return nullptr;
-                assert(err == STATUS_OK);
-                auto np = new node_pointer<Key, Value>(lptr, physical_pointer{*reinterpret_cast<uint64_t*>(buf.data)}, rc_version);
+                assert(!ec);
+                auto np = new node_pointer<Key, Value>(lptr, std::get<0>(pptr), std::get<1>(pptr));
                 decltype(np) todel = nullptr;
                 map_.exec_on(lptr, [&np, txid, &todel](node_pointer<Key, Value>*& e){
                     todel = nullptr;
@@ -138,7 +126,7 @@ namespace bdtree {
                 return cache_return::Nop;
             });
             if (do_delete)
-                awesome::mark_for_deletion(do_delete);
+                crossbow::allocator::destroy(do_delete);
             return result;
         }
 
@@ -154,7 +142,7 @@ namespace bdtree {
                     return cache_return::Nop;
                 }
             });
-            awesome::mark_for_deletion(do_delete);
+            crossbow::allocator::destroy(do_delete);
         }
         
         void invalidate_if_older(logical_pointer lptr, uint64_t rc_version) {
@@ -169,18 +157,21 @@ namespace bdtree {
                 }
                 return cache_return::Nop;
             });
-            awesome::mark_for_deletion(do_delete);
+            crossbow::allocator::destroy(do_delete);
         }
 
-        void print_statistics() {
+        void print_statistics(operation_context<Key, Value, Backend>& context) {
             uint64_t counter = 0;
             uint64_t max_chain = 0;
             uint64_t chain_sum = 0;
             uint64_t items = 0;
-            map_.for_each([this, &counter, &max_chain, &items, &chain_sum](logical_pointer lptr, node_pointer<Key, Value>* e){
+            map_.for_each([this, &counter, &max_chain, &items, &chain_sum, &context]
+                    (logical_pointer lptr, node_pointer<Key, Value>* e) {
                 ++items;
-                ramcloud_buffer buf;
-                if (rc_read(this->get_ptr_table().value, lptr.value_ptr(), lptr.length, &buf) == STATUS_OBJECT_DOESNT_EXIST) {
+                uint64_t lptr_version;
+                std::error_code ec;
+                context.get_ptr_table().read(lptr, lptr_version, ec);
+                if (ec == error::object_doesnt_exist) {
                     ++counter;
                 }
                 uint64_t chain_length = 0;

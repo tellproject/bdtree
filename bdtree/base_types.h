@@ -1,15 +1,18 @@
 #pragma once
+
+#include <bdtree/forward_declarations.h>
+#include <bdtree/primitive_types.h>
+#include <bdtree/stl_specializations.h>
+#include <bdtree/serializer.h>
+
+#include <crossbow/allocator.hpp>
+
+#include <stack>
 #include <vector>
 
-#include <serializer.h>
 #ifndef NDEBUG
 #include <unordered_set>
 #endif
-
-#include "forward_declarations.h"
-#include "primitive_types.h"
-#include "stacktrace.h"
-#include "stl_specializations.h"
 
 namespace bdtree {
 
@@ -19,21 +22,34 @@ enum class erase_result {
     Merged
 };
 
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename Backend>
 struct operation_context {
-    operation_context(logical_table_cache<Key, Value>& cache, uint64_t tx_id)
-        :cache(cache), tx_id(tx_id) {}
-    logical_table_cache<Key, Value>& cache;
+    operation_context(Backend& backend, logical_table_cache<Key, Value, Backend>& cache, uint64_t tx_id)
+        : backend(backend), cache(cache), tx_id(tx_id) {}
+    Backend& backend;
+    logical_table_cache<Key, Value, Backend>& cache;
     uint64_t tx_id;
     std::stack<logical_pointer> node_stack;
 #ifndef NDEBUG
     std::unordered_set<logical_pointer> locks;
 #endif
-    logical_pointer_table get_ptr_table() const {
-        return cache.get_ptr_table();
+    typename Backend::ptr_table& get_ptr_table() {
+        return backend.get_ptr_table();
     }
-    node_table get_node_table() const {
-        return cache.get_node_table();
+    typename Backend::node_table& get_node_table() const {
+        return backend.get_node_table();
+    }
+
+    node_pointer<Key, Value>* get_from_cache(logical_pointer lptr) {
+        return cache.get_from_cache(lptr, *this);
+    }
+
+    node_pointer<Key, Value>* get_current_from_cache(logical_pointer lptr) {
+        return cache.get_current_from_cache(lptr, *this);
+    }
+
+    node_pointer<Key, Value>* get_without_cache(logical_pointer lptr) {
+        return cache.get_without_cache(lptr, *this);
     }
 };
 
@@ -66,16 +82,16 @@ public: // new/delete
         return nullptr;
     }
     void* operator new(std::size_t size) {
-        return awesome::malloc(size);
+        return crossbow::allocator::malloc(size);
     }
     void* operator new[](std::size_t size) {
-        return awesome::malloc(size);
+        return crossbow::allocator::malloc(size);
     }
     void operator delete(void* ptr) {
-        awesome::free_now(ptr);
+        crossbow::allocator::free_now(ptr);
     }
     void operator delete[](void* ptr) {
-        awesome::free_now(ptr);
+        crossbow::allocator::free_now(ptr);
     }
 };
 

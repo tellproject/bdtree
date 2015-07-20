@@ -13,19 +13,20 @@ enum class cache_use {
     Current
 };
 
-template<typename Key, typename Value>
-node_pointer<Key, Value>* lower_bound_node_with_context(const Key & key, operation_context<Key, Value>& context, search_bound bound, cache_use use_cache = cache_use::Current) {
+template<typename Key, typename Value, typename Backend>
+node_pointer<Key, Value>* lower_bound_node_with_context(const Key & key,
+        operation_context<Key, Value, Backend>& context, search_bound bound, cache_use use_cache = cache_use::Current) {
     assert(!context.node_stack.empty());
     auto get_child = [&context, use_cache] (logical_pointer lptr) -> node_pointer<Key, Value>* {
         assert(lptr == context.node_stack.top());
-        node_pointer<Key, Value>* np = context.cache.get_from_cache(lptr, context);
+        node_pointer<Key, Value>* np = context.get_from_cache(lptr);
         if (np == nullptr)
             return nullptr;
         auto node_type = np->node_->get_node_type();
         if (node_type == node_type_t::LeafNode){
             np = use_cache == cache_use::Current ?
-                        context.cache.get_current_from_cache(lptr, context)
-                      : context.cache.get_without_cache(lptr, context);
+                        context.get_current_from_cache(lptr)
+                      : context.get_without_cache(lptr);
         }
         return np;
     };
@@ -76,14 +77,17 @@ node_pointer<Key, Value>* lower_bound_node_with_context(const Key & key, operati
 
 }
 
-template<typename Key, typename Value>
-bdtree_iterator<Key, Value> lower_bound_with_context(const Key & key, operation_context<Key, Value>& context, search_bound bound) {
-    return bdtree_iterator<Key, Value>(std::move(context), lower_bound_node_with_context(key, context, bound), key);
+template<typename Key, typename Value, typename Backend>
+bdtree_iterator<Key, Value, Backend> lower_bound_with_context(const Key & key,
+        operation_context<Key, Value, Backend>& context, search_bound bound) {
+    return bdtree_iterator<Key, Value, Backend>(std::move(context), lower_bound_node_with_context(key, context, bound),
+            key);
 }
 
-template<typename Key, typename Value>
-std::pair<node_pointer<Key, Value>*, operation_context<Key, Value>> lower_node_bound(const Key & key, logical_table_cache<Key, Value>& cache, uint64_t tx_id) {
-    operation_context<Key, Value> context{cache, tx_id};
+template<typename Key, typename Value, typename Backend>
+std::pair<node_pointer<Key, Value>*, operation_context<Key, Value, Backend>> lower_node_bound(const Key & key,
+        Backend& backend, logical_table_cache<Key, Value, Backend>& cache, uint64_t tx_id) {
+    operation_context<Key, Value, Backend> context{backend, cache, tx_id};
 
     logical_pointer lptr{1};
     context.node_stack.push(lptr);
@@ -91,10 +95,11 @@ std::pair<node_pointer<Key, Value>*, operation_context<Key, Value>> lower_node_b
     return std::make_pair(res, std::move(context));
 }
 
-template<typename Key, typename Value>
-bdtree_iterator<Key, Value> lower_bound(const Key & key, logical_table_cache<Key, Value>& cache, uint64_t tx_id) {
-    auto res = lower_node_bound(key, cache, tx_id);
-    return bdtree_iterator<Key, Value>(std::move(res.second), res.first, key);
+template<typename Key, typename Value, typename Backend>
+bdtree_iterator<Key, Value, Backend> lower_bound(const Key & key, Backend& backend,
+        logical_table_cache<Key, Value, Backend>& cache, uint64_t tx_id) {
+    auto res = lower_node_bound(key, backend, cache, tx_id);
+    return bdtree_iterator<Key, Value, Backend>(std::move(res.second), res.first, key);
 }
 
 }

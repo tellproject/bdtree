@@ -4,7 +4,6 @@
 
 #include "primitive_types.h"
 #include "base_types.h"
-#include "../amalloc.h"
 
 namespace bdtree {
 	template<typename Key, typename Value>

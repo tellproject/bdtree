@@ -1,28 +1,24 @@
 #pragma once
-#include "amalloc.h"
+
+#include <bdtree/serialize_policies.h>
+#include <bdtree/primitive_types.h>
+#include <bdtree/forward_declarations.h>
+#include <bdtree/base_types.h>
+#include <bdtree/stl_specializations.h>
+#include <bdtree/node_pointer.h>
+#include <bdtree/logical_table_cache.h>
+#include <bdtree/deltas.h>
+#include <bdtree/nodes.h>
+#include <bdtree/resolve_operation.h>
+#include <bdtree/iterator.h>
+#include <bdtree/search_operation.h>
+#include <bdtree/leaf_operations.h>
+#include <bdtree/error_code.h>
+
 #include <array>
 #include <limits>
 #include <mutex>
 #include <vector>
-#include <stack>
-
-#include <cramcloud.h>
-#include <concurrent_map.h>
-
-#include "bdtree/serialize_policies.h"
-#include "bdtree/primitive_types.h"
-#include "bdtree/forward_declarations.h"
-#include "bdtree/base_types.h"
-#include "bdtree/stl_specializations.h"
-#include "bdtree/node_pointer.h"
-#include "bdtree/logical_table_cache.h"
-#include "bdtree/deltas.h"
-#include "bdtree/nodes.h"
-#include "bdtree/resolve_operation.h"
-#include "bdtree/iterator.h"
-#include "bdtree/search_operation.h"
-#include "bdtree/leaf_operations.h"
-
 
 namespace bdtree {
 
@@ -31,50 +27,46 @@ namespace bdtree {
         bool operator!=(const empty_t &) {return false;}
     };
 
-    template<typename Key, typename Value>
+    template<typename Key, typename Value, typename Backend>
     class map
     {
-        logical_table_cache<Key, Value>& cache_;
+        Backend& backend_;
+        logical_table_cache<Key, Value, Backend>& cache_;
         uint64_t tx_id_;
     public: // types
         typedef Key key_type;
         typedef Value value_type;
         typedef bdtree::erase_result erase_result;
-        typedef bdtree_iterator<Key, Value> iterator;
+        typedef bdtree_iterator<Key, Value, Backend> iterator;
     public: // construction/destruction
-        map(logical_table_cache<Key, Value>& cache, uint64_t tx_id, bool init = false)
-            : cache_(cache), tx_id_(tx_id)
+        map(Backend& backend, logical_table_cache<Key, Value, Backend>& cache, uint64_t tx_id, bool init = false)
+            : backend_(backend), cache_(cache), tx_id_(tx_id)
         {
             if (init) {
-                // root node
-                physical_pointer one_pptr{1};
-                logical_pointer one_lptr{1};
-                ramcloud_reject_rules r;
-                r.exists = 1;
-                //write 1 into node counter and lptr counter
-                counter cnt;
-                cnt.setProperties(cache_.get_node_table().value);
-                cnt.initCounterValue(1);
-                cnt.setProperties(cache_.get_ptr_table().value);
-                cnt.initCounterValue(1);
-
-                leaf_node<Key, Value>* node = new leaf_node<Key, Value>(one_pptr);
+                auto& node_table = backend_.get_node_table();
+                auto root_pptr = node_table.get_next_ptr();
+                assert(root_pptr == physical_pointer{1});
+                leaf_node<Key, Value>* node = new leaf_node<Key, Value>(root_pptr);
                 node->low_key_ = null_key<Key>::value();
                 auto ser = node->serialize();
+
                 //write root node at pptr{1}
-                auto err = rc_write_with_reject(cache_.get_node_table().value, one_pptr.value_ptr(), one_pptr.length, reinterpret_cast<const char*>(ser.data()), uint32_t(ser.size()),&ramcloud_reject_if_exists, nullptr);
-                if (err != STATUS_OK){
-                    assert(err == STATUS_OBJECT_EXISTS);
+                std::error_code ec;
+                node_table.insert(root_pptr, reinterpret_cast<const char*>(ser.data()), ser.size(), ec);
+                if (ec) {
+                    assert(ec == error::object_exists);
                     delete node;
                     return;
                 }
 
                 // ptr to root (lptr{1} -> pptr{1})
-                uint64_t rc_version;
                 auto last_tx_id = get_last_tx_id();
-                err = rc_write_with_reject(cache_.get_ptr_table().value, one_lptr.value_ptr(), one_lptr.length, (const char*) &one_pptr, uint32_t(sizeof(one_pptr)), nullptr, &rc_version);
-                assert(err == STATUS_OK);
-                node_pointer<Key, Value> *nptr = new node_pointer<Key, Value>(one_lptr, one_pptr, rc_version);
+
+                auto& ptr_table = backend_.get_ptr_table();
+                auto root_lptr = ptr_table.get_next_ptr();
+                assert(root_lptr == logical_pointer{1});
+                auto new_lptr_version = ptr_table.insert(root_lptr, root_pptr);
+                node_pointer<Key, Value> *nptr = new node_pointer<Key, Value>(root_lptr, root_pptr, new_lptr_version);
                 nptr->node_ = node;
                 if (!cache_.add_entry(nptr, last_tx_id)) {
                     delete nptr;
@@ -83,7 +75,7 @@ namespace bdtree {
         }
     public: // operations
         iterator find(const key_type& key) const {
-            return lower_bound(key, cache_, tx_id_);
+            return lower_bound(key, backend_, cache_, tx_id_);
         }
         iterator end() const {
             return iterator();
@@ -92,7 +84,7 @@ namespace bdtree {
         bool insert(const Key& key, const Value& value) {
             key_compare<Key, Value> comp;
             insert_operation<Key, Value> op(key, value, comp);
-            return exec_leaf_operation(key, cache_, tx_id_, op);
+            return exec_leaf_operation(key, backend_, cache_, tx_id_, op);
         }
 
         template <typename V = Value>
@@ -106,7 +98,7 @@ namespace bdtree {
         bool erase(const Key& key) {
             key_compare<Key, Value> comp;
             delete_operation<Key, Value> op(key, comp);
-            return exec_leaf_operation(key, cache_, tx_id_, op);
+            return exec_leaf_operation(key, backend_, cache_, tx_id_, op);
         }
 
         bool remove_if_unmodified(iterator& iter) {
@@ -114,16 +106,16 @@ namespace bdtree {
         }
 
         void print_statistics() {
-            ramcloud_buffer buf;
-            counter node_counter(cache_.get_node_table().value);
-            uint64_t max_node = node_counter.get_remote_value();
+            auto& node_table = backend_.get_node_table();
+            uint64_t max_node = node_table.get_remote_ptr().value;
             std::vector<uint64_t> counts(uint8_t(node_type_t::MergeDelta) + 1);
             for (uint64_t i = 1; i <= max_node ; ++i) {
                 physical_pointer pptr{i};
-                auto rc_res = rc_read(cache_.get_node_table().value, pptr.value_ptr(), pptr.length, &buf);
-                if (rc_res != STATUS_OK)
+                std::error_code ec;
+                auto buf = node_table.read(pptr, ec);
+                if (ec)
                     continue;
-                auto* node = deserialize<Key, Value>(buf.data, buf.length, pptr);
+                auto* node = deserialize<Key, Value>(reinterpret_cast<const uint8_t*>(buf.data()), buf.length(), pptr);
                 if (node->get_node_type() == node_type_t::LeafNode) {
                     std::cout << "found leaf_node with pptr: " << pptr.value << std::endl;
                 } else if (node->get_node_type() == node_type_t::InsertDelta) {

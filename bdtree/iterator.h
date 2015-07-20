@@ -1,26 +1,27 @@
 #pragma once
 
+#include <bdtree/bdtree.h>
+#include <bdtree/config.h>
+#include <bdtree/primitive_types.h>
+#include <bdtree/base_types.h>
+#include <bdtree/util.h>
+#include <bdtree/merge_operation.h>
+
 #include <boost/optional.hpp>
 #include <boost/none.hpp>
+
 #include <algorithm>
 
-#include <bdtree.h>
-#include "primitive_types.h"
-#include "base_types.h"
-#include "util.h"
-#include "merge_operation.h"
-#include <bdtree/config.h>
-
 namespace bdtree {
-    template<typename Key, typename Value>
+    template<typename Key, typename Value, typename Backend>
     struct bdtree_iterator : public std::iterator<std::bidirectional_iterator_tag, const std::pair<Key, Value>> {
         typedef std::bidirectional_iterator_tag Category;
-        boost::optional<operation_context<Key, Value>> context_;
+        boost::optional<operation_context<Key, Value, Backend>> context_;
         node_pointer<Key, Value>* current_ = nullptr;
         typename decltype(leaf_node<Key,Value>::array_)::iterator current_iterator_;
         key_compare<Key, Value> cmp_;
         bdtree_iterator(){}
-        bdtree_iterator(operation_context<Key, Value> && context, decltype(current_) n, const Key & key)
+        bdtree_iterator(operation_context<Key, Value, Backend> && context, decltype(current_) n, const Key & key)
             : context_(std::move(context)), current_(n) {
             assert(current_ != nullptr);
             current_iterator_ = std::lower_bound(current_->as_leaf()->array_.begin(), current_->as_leaf()->array_.end(), key, cmp_);
@@ -44,31 +45,31 @@ namespace bdtree {
             assert(nl->deltas_.size() == 0);
             auto s = nl->serialized_size();
             if (s < MIN_NODE_SIZE && current_->lptr_.value != 1) {
-                merge_operation<Key, Value>::execute_merge(current_, leaf, *context_);
+                merge_operation<Key, Value, Backend>::execute_merge(current_, leaf, *context_);
                 return erase_result::Merged;
             }
             data = nl->serialize();
-            physical_pointer pptr = context_->cache.get_next_physical_ptr();
+
+            auto& node_table = context_->get_node_table();
+            auto pptr = node_table.get_next_ptr();
             nl->leaf_pptr_ = pptr;
-            auto rc_res = rc_write(context_->get_node_table().value, pptr.value_ptr(), pptr.length, reinterpret_cast<char*>(data.data()), data.size());
-            assert(rc_res == STATUS_OK);
-            ramcloud_reject_rules rules;
-            rules.doesntExist = 1;
-            rules.givenVersion = current_->rc_version_;
-            rules.versionNeGiven = 1;
-            uint64_t rc_version;
             auto last_tx_id = get_last_tx_id();
-            rc_res = rc_write_with_reject(context_->get_ptr_table().value, current_->lptr_.value_ptr(), current_->lptr_.length, pptr.value_ptr(), pptr.length, &rules, &rc_version);
-            if (rc_res == STATUS_WRONG_VERSION || rc_res == STATUS_OBJECT_DOESNT_EXIST) {
+
+            node_table.insert(pptr, reinterpret_cast<char*>(data.data()), data.size());
+
+            auto& ptr_table = context_->get_ptr_table();
+            std::error_code ec;
+            auto lptr_version = ptr_table.update(current_->lptr_, pptr, current_->rc_version_, ec);
+            if (ec == error::wrong_version || ec == error::object_doesnt_exist) {
                 delete nl;
-                rc_res = rc_remove(context_->get_node_table().value, pptr.value_ptr(), pptr.length);
+                node_table.remove(pptr);
                 return erase_result::Failed;
             }
-            node_pointer<Key, Value>* np = new node_pointer<Key, Value>(current_->lptr_, pptr, rc_version);
+
+            node_pointer<Key, Value>* np = new node_pointer<Key, Value>(current_->lptr_, pptr, lptr_version);
             np->node_ = nl;
             static_assert(CONSOLIDATE_AT == 0 && FakeParam == FakeParam, "bdtree_iterator::erase_if_no_newer cannot correctly handle delta chains");
-            rc_res = rc_remove(context_->get_node_table().value, current_->ptr_.value_ptr(), current_->ptr_.length);
-            assert(rc_res == STATUS_OK);
+            node_table.remove(current_->ptr_);
             if (!context_->cache.add_entry(np, last_tx_id)) {
                 delete np;
                 ++(*this);
@@ -105,7 +106,7 @@ namespace bdtree {
             return false;
         }
 
-        bdtree_iterator<Key, Value>& operator ++() {
+        bdtree_iterator<Key, Value, Backend>& operator ++() {
             assert(!after());
             //leaf_node<Key, Value>* np = get_next(*context_, current_);
             ++current_iterator_;
@@ -147,7 +148,7 @@ namespace bdtree {
         }
 
 
-        bdtree_iterator<Key, Value>& operator --() {
+        bdtree_iterator<Key, Value, Backend>& operator --() {
             assert(!after());
             --current_iterator_;
             if (current_iterator_ != current_->as_leaf()->array_.begin() - 1) {
@@ -181,13 +182,13 @@ namespace bdtree {
             assert((current_ == nullptr && !context_) || (current_ && context_));
             return current_ == nullptr || !context_;
         }
-        bool operator ==(const bdtree_iterator<Key,Value>& other) const {
+        bool operator ==(const bdtree_iterator<Key, Value, Backend>& other) const {
             if (other.after() || after()) {
                 return current_ == other.current_;
             }
             return (**this) == (*other);//TODO: nicer
         }
-        bool operator !=(const bdtree_iterator<Key,Value>& other) const {
+        bool operator !=(const bdtree_iterator<Key, Value, Backend>& other) const {
             return !(*this == other);
         }
         template <typename V = Value>

@@ -25,20 +25,6 @@ namespace bdtree {
     extern void got_tx_id(uint64_t tx_id);
     extern uint64_t get_last_tx_id();
     
-    struct logical_pointer_table {
-        uint64_t value;
-        bool operator== (logical_pointer_table other) const {
-            return value == other.value;
-        }
-    };
-    
-    struct node_table {
-        uint64_t value;
-        bool operator== (node_table other) const {
-            return value == other.value;
-        }
-    };
-    
     struct logical_pointer {
         uint64_t value;
         static constexpr uint16_t length = sizeof(uint64_t);

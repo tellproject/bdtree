@@ -1,6 +1,7 @@
 #pragma once
 
-#include <serializer.h>
+#include <bdtree/serializer.h>
+
 #include <boost/optional.hpp>
 
 template<typename Archiver, typename T>

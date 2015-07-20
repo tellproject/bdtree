@@ -1,9 +1,12 @@
 #pragma once
 #include "logical_table_cache.h"
 #include "base_types.h"
-#include <memory>
-#include <atomic>
 
+#include <crossbow/allocator.hpp>
+
+#include <atomic>
+#include <memory>
+#include <mutex>
 
 namespace bdtree {
 	template<typename Key, typename Value>
@@ -51,7 +54,7 @@ namespace bdtree {
         }
         
         void reset_old(node_pointer<Key, Value> *o) {
-            awesome::mark_for_deletion(old_.release());
+            crossbow::allocator::destroy(old_.release());
             old_.reset(o);
         }
         
@@ -59,7 +62,8 @@ namespace bdtree {
             old_.release();
         }
         
-        bool resolve(operation_context<Key, Value>& context) {
+        template <typename Backend>
+        bool resolve(operation_context<Key, Value, Backend>& context) {
             if (!node_) {
                 assert(context.locks.find(lptr_) == context.locks.end());
                 std::lock_guard<decltype(mutex_)> l(mutex_);
@@ -72,24 +76,26 @@ namespace bdtree {
 #endif
                     goto END;
                 }
-                ramcloud_buffer buf;
-                auto err = rc_read(context.get_node_table().value, ptr_.value_ptr(), physical_pointer::length, &buf);
-                if (err == STATUS_OBJECT_DOESNT_EXIST) {
+
+                auto& node_table = context.get_node_table();
+                std::error_code ec;
+                auto buf = node_table.read(ptr_, ec);
+                if (ec == error::object_doesnt_exist) {
 #ifndef NDEBUG
                     context.locks.erase(lptr_);
 #endif
                     return false;
                 }
-                assert(err == STATUS_OK);
-                auto n = deserialize<Key, Value>(buf.data, buf.length, ptr_);
-                resolve_operation<Key, Value> op(lptr_, ptr_, old_.get(), context, rc_version_);
+                assert(!ec);
+                auto n = deserialize<Key, Value>(reinterpret_cast<const uint8_t*>(buf.data()), buf.length(), ptr_);
+                resolve_operation<Key, Value, Backend> op(lptr_, ptr_, old_.get(), context, rc_version_);
                 if (!n->accept(op)) {
 #ifndef NDEBUG
                     context.locks.erase(lptr_);
 #endif
                     return false;
                 }
-                awesome::mark_for_deletion(old_.release());
+                crossbow::allocator::destroy(old_.release());
                 node_ = op.result;
                 op.result = nullptr;
 #ifndef NDEBUG

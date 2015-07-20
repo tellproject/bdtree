@@ -1,14 +1,13 @@
 #pragma once
 
+#include <bdtree/base_types.h>
+#include <bdtree/forward_declarations.h>
+#include <bdtree/logical_table_cache.h>
+#include <bdtree/primitive_types.h>
+
+#include <cassert>
 #include <functional>
 #include <limits>
-#include <cassert>
-
-#include "base_types.h"
-#include "forward_declarations.h"
-#include "logical_table_cache.h"
-#include "primitive_types.h"
-
 
 namespace bdtree {
 
@@ -17,21 +16,24 @@ struct node_delete;
 
 template<typename Key, typename Value>
 struct node_delete<inner_node<Key, Value> > {
-    static void rem(inner_node<Key, Value>& inner, physical_pointer pptr, operation_context<Key, Value>& context) {
-        __attribute__((unused)) auto rc_res = rc_remove(context.get_node_table().value, pptr.value_ptr(), pptr.length);
-        assert(rc_res == STATUS_OK);
+    template <typename Backend>
+    static void rem(inner_node<Key, Value>& inner, physical_pointer pptr,
+            operation_context<Key, Value, Backend>& context) {
+        auto& node_table = context.get_node_table();
+        node_table.remove(pptr);
     }
 };
 
 template<typename Key, typename Value>
 struct node_delete<leaf_node<Key, Value> > {
-    static void rem(leaf_node<Key, Value>& leaf, physical_pointer pptr, operation_context<Key, Value>& context) {
-        __attribute__((unused)) auto rc_res = rc_remove(context.get_node_table().value, leaf.leaf_pptr_.value_ptr(), leaf.leaf_pptr_.length);
-        assert(rc_res == STATUS_OK);
+    template <typename Backend>
+    static void rem(leaf_node<Key, Value>& leaf, physical_pointer pptr,
+            operation_context<Key, Value, Backend>& context) {
+        auto& node_table = context.get_node_table();
+        node_table.remove(leaf.leaf_pptr_);
         for (physical_pointer ptr : leaf.deltas_) {
             assert(ptr != leaf.leaf_pptr_);
-            rc_res = rc_remove(context.get_node_table().value, ptr.value_ptr(), ptr.length);
-            assert(rc_res == STATUS_OK);
+            node_table.remove(ptr);
         }
     }
 };
@@ -109,8 +111,9 @@ struct guard {
 };
 
 //re-reads the nodes in context.node_stack from bottom to top without cache
-template<typename Key, typename Value>
-node_pointer<Key, Value>* fix_stack(const Key& key, operation_context<Key, Value>& context, search_bound bound) {
+template<typename Key, typename Value, typename Backend>
+node_pointer<Key, Value>* fix_stack(const Key& key, operation_context<Key, Value, Backend>& context,
+        search_bound bound) {
     assert(!context.node_stack.empty());
     node_pointer<Key, Value>* np = nullptr;
 #ifndef NDEBUG
@@ -120,7 +123,7 @@ node_pointer<Key, Value>* fix_stack(const Key& key, operation_context<Key, Value
 #endif
     for (;;) {
         auto lptr = context.node_stack.top();
-        np = context.cache.get_without_cache(lptr, context);
+        np = context.get_without_cache(lptr);
         if (np == nullptr) {
             context.node_stack.pop();
             assert(!context.node_stack.empty());
@@ -143,8 +146,8 @@ node_pointer<Key, Value>* fix_stack(const Key& key, operation_context<Key, Value
     }
 }
 
-template<typename Key, typename Value>
-node_pointer<Key, Value>* get_next(operation_context<Key, Value>& context, node_pointer<Key, Value>* current) {
+template<typename Key, typename Value, typename Backend>
+node_pointer<Key, Value>* get_next(operation_context<Key, Value, Backend>& context, node_pointer<Key, Value>* current) {
     assert(current);
     if (!current->as_leaf()->high_key_) {//at the end
         assert(false);
@@ -153,7 +156,7 @@ node_pointer<Key, Value>* get_next(operation_context<Key, Value>& context, node_
     auto current_lptr = current->lptr_;
     for (;;) {
         //1. try reading next
-        auto np = context.cache.get_current_from_cache(current->as_leaf()->right_link_, context);
+        auto np = context.get_current_from_cache(current->as_leaf()->right_link_);
         if (np) {
             assert(np->lptr_ == current->as_leaf()->right_link_);
             if (np->node_->get_node_type() == node_type_t::LeafNode) {
@@ -162,7 +165,7 @@ node_pointer<Key, Value>* get_next(operation_context<Key, Value>& context, node_
             return np;
         }
         //2. reread current, and retry reading next
-        np = context.cache.get_without_cache(current_lptr, context);
+        np = context.get_without_cache(current_lptr);
         if (np == nullptr) {//current is deleted
             break;
         }
@@ -178,19 +181,21 @@ node_pointer<Key, Value>* get_next(operation_context<Key, Value>& context, node_
     //3. search for n.high_key_
     if (context.node_stack.size() > 1)
         context.node_stack.pop();
-    auto iter = lower_bound_with_context<Key,Value>(*current->as_leaf()->high_key_, context);
+    auto iter = lower_bound_with_context<Key, Value, Backend>(*current->as_leaf()->high_key_, context);
     return iter.current_;
 }
 
-template<typename Key, typename Value>
-node_pointer<Key, Value>* get_previous(operation_context<Key, Value>& context, node_pointer<Key, Value>* current) {
+template<typename Key, typename Value, typename Backend>
+node_pointer<Key, Value>* get_previous(operation_context<Key, Value, Backend>& context,
+        node_pointer<Key, Value>* current) {
     assert(current);
     if (current->as_leaf()->low_key_ == null_key<Key>::value()) {
         assert(false);
         return nullptr;
     }
     context.node_stack.pop();
-    auto iter = lower_bound_with_context<Key,Value>(current->as_leaf()->low_key_, context, search_bound::LAST_SMALLER);
+    auto iter = lower_bound_with_context<Key, Value, Backend>(current->as_leaf()->low_key_, context,
+            search_bound::LAST_SMALLER);
     return iter.current_;
 }
 

@@ -1,11 +1,12 @@
 #pragma once
 #include "bdtree/primitive_types.h"
 #include "bdtree/node_pointer.h"
-#include "../amalloc.h"
 
 #include <array>
 #include <vector>
 #include <functional>
+
+#include <crossbow/allocator.hpp>
 
 namespace bdtree {
 
@@ -187,7 +188,7 @@ public:
                 if (e.entries[i].cas(old_en, entry)) {
                     // if success, update access list
                     if (old_en.ptr && !found) {
-                        awesome::mark_for_deletion(old_en.ptr);
+                        crossbow::allocator::destroy(old_en.ptr);
                     }
                     auto o = e.order.load();
                     auto old_order = o;

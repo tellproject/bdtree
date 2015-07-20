@@ -5,19 +5,18 @@
 
 #include <bdtree/config.h>
 #include "forward_declarations.h"
-#include <cramcloud.h>
 #include "node_pointer.h"
 #include "deltas.h"
 #include "split_operation.h"
 #include "merge_operation.h"
 
 namespace bdtree {
-    template<typename Key, typename Value>
+    template<typename Key, typename Value, typename Backend>
     struct resolve_operation : public operation<Key, Value> {
         logical_pointer lptr_;
         node_pointer<Key, Value>* old;
-        operation_context<Key, Value>& context_;
-        resolve_operation(logical_pointer lptr, physical_pointer lastpptr, decltype(old) o, operation_context<Key, Value>& context, uint64_t rc_version)
+        operation_context<Key, Value, Backend>& context_;
+        resolve_operation(logical_pointer lptr, physical_pointer lastpptr, decltype(old) o, operation_context<Key, Value, Backend>& context, uint64_t rc_version)
             : lptr_(lptr), old(o), context_(context), lastpptr(lastpptr), rc_version(rc_version) {}
         virtual ~resolve_operation() {
             for (auto p : deltas) {
@@ -84,7 +83,7 @@ namespace bdtree {
 
         bool visit(split_delta<Key, Value>& node) override {
             auto old_stack = context_.node_stack;
-            split_operation<Key, Value>::continue_split(lptr_, lastpptr, rc_version, &node, context_);
+            split_operation<Key, Value, Backend>::continue_split(lptr_, lastpptr, rc_version, &node, context_);
             context_.node_stack = old_stack;
             delete &node;
             return false;
@@ -92,7 +91,7 @@ namespace bdtree {
 
         bool visit(remove_delta<Key, Value>& node) override {
             auto old_stack = context_.node_stack;
-            merge_operation<Key, Value>::continue_merge(lptr_, lastpptr, rc_version, &node, context_);
+            merge_operation<Key, Value, Backend>::continue_merge(lptr_, lastpptr, rc_version, &node, context_);
             context_.node_stack = old_stack;
             delete &node;
             return false;
@@ -100,7 +99,7 @@ namespace bdtree {
 
         bool visit(merge_delta<Key, Value>& node) override {
             auto old_stack = context_.node_stack;
-            merge_operation<Key, Value>::continue_merge(lptr_, lastpptr, rc_version, &node, context_);
+            merge_operation<Key, Value, Backend>::continue_merge(lptr_, lastpptr, rc_version, &node, context_);
             context_.node_stack = old_stack;
             delete &node;
             return false;
@@ -114,13 +113,14 @@ namespace bdtree {
                 old = nullptr;
                 return res->accept(*this);
             }
-            ramcloud_buffer buf;
-            auto err = rc_read(context_.get_node_table().value, node.next.value_ptr(), physical_pointer::length, &buf);
+            auto& node_table = context_.get_node_table();
+            std::error_code ec;
+            auto buf = node_table.read(node.next, ec);
             lastpptr = node.next;
-            if (err != STATUS_OK) {
+            if (ec) {
                 return false;
             }
-            auto res = deserialize<Key, Value>(buf.data, buf.length, node.next);
+            auto res = deserialize<Key, Value>(reinterpret_cast<const uint8_t*>(buf.data()), buf.length(), node.next);
             return res->accept(*this);
         }
     };

@@ -10,10 +10,10 @@
 
 namespace bdtree {
 
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename Backend>
 struct merge_operation {
 public:
-    typedef operation_context<Key, Value> context_t;
+    typedef operation_context<Key, Value, Backend> context_t;
 private:
     template<typename NodeType>
     static bool is_left_sibling(NodeType* node, logical_pointer right_lptr) {
@@ -47,67 +47,64 @@ private:
 
     template<typename NodeType>
     static void consolidate(NodeType* left, NodeType* right, logical_pointer merge_lptr, physical_pointer merge_pptr, uint64_t merge_rc_version, merge_delta<Key, Value> *mergedelta, context_t& context) {
+        auto& node_table = context.get_node_table();
+        auto pptr = node_table.get_next_ptr();
+
         NodeType* consolidated = new NodeType(*left);
         consolidated->array_.reserve(consolidated->array_.size() + right->array_.size());
         consolidated->array_.insert(consolidated->array_.end(), right->array_.begin(), right->array_.end());
         consolidated->right_link_ = right->right_link_;
         consolidated->high_key_ = right->high_key_;
         consolidated->clear_deltas();
-        physical_pointer pptr = context.cache.get_next_physical_ptr();
         consolidated->set_pptr(pptr);
         std::vector<uint8_t> data = consolidated->serialize();
-        auto rc_res = rc_write(context.get_node_table().value, pptr.value_ptr(), pptr.length, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
-        assert(rc_res == STATUS_OK);
-        ramcloud_reject_rules rules;
-        rules.doesntExist = 1;
-        rules.givenVersion = merge_rc_version;
-        rules.versionNeGiven = 1;
-        uint64_t rc_version;
-        rc_res = rc_write_with_reject(context.get_ptr_table().value, merge_lptr.value_ptr(), merge_lptr.length, pptr.value_ptr(), pptr.length, &rules, &rc_version);
-        if (rc_res == STATUS_WRONG_VERSION || rc_res == STATUS_OBJECT_DOESNT_EXIST) {
-            if (rc_res == STATUS_OBJECT_DOESNT_EXIST)
+        node_table.insert(pptr, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
+
+        auto& ptr_table = context.get_ptr_table();
+        std::error_code ec;
+        auto rc_version = ptr_table.update(merge_lptr, pptr, merge_rc_version, ec);
+        if (ec == error::wrong_version || ec == error::object_doesnt_exist) {
+            if (ec == error::object_doesnt_exist)
                 context.cache.invalidate(merge_lptr);
             delete consolidated;
-            rc_res = rc_remove(context.get_node_table().value, pptr.value_ptr(), pptr.length);//save
-            assert(rc_res == STATUS_OK);
+            node_table.remove(pptr);
             return;
         }
-        assert(rc_res == STATUS_OK);
+        assert(!ec);
         node_pointer<Key, Value>* np = new node_pointer<Key, Value>(merge_lptr, pptr, rc_version);
         np->node_ = consolidated;
         if (!context.cache.add_entry(np, context.tx_id)) {
             delete np;
         }
         context.cache.invalidate(mergedelta->rmdelta);
-        rc_res = rc_remove(context.get_ptr_table().value, mergedelta->rmdelta.value_ptr(), mergedelta->rmdelta.length);
-        assert(rc_res == STATUS_OK);
-        rc_res = rc_remove(context.get_node_table().value, merge_pptr.value_ptr(), merge_pptr.length);
-        assert(rc_res == STATUS_OK);
-        rc_res = rc_remove(context.get_node_table().value, mergedelta->rmdeltapptr.value_ptr(), mergedelta->rmdeltapptr.length);
-        assert(rc_res == STATUS_OK);
+        // TODO We need to know the pointer version
+        ptr_table.remove(mergedelta->rmdelta, std::numeric_limits<uint64_t>::max());
+        node_table.remove(merge_pptr);
+        node_table.remove(mergedelta->rmdeltapptr);
         node_delete<NodeType>::rem(*left, mergedelta->next, context);
         node_delete<NodeType>::rem(*right, mergedelta->rm_next, context);
     }
 
     static void consolidate(logical_pointer merge_lptr, physical_pointer merge_pptr, uint64_t merge_rc_version, merge_delta<Key, Value> *mergedelta, context_t& context) {
-        ramcloud_buffer buf;
-        auto rc_res = rc_read(context.get_node_table().value, mergedelta->next.value_ptr(), mergedelta->next.length, &buf);
-        if (rc_res == STATUS_OBJECT_DOESNT_EXIST) {
+        auto& node_table = context.get_node_table();
+        std::error_code ec;
+        auto buf = node_table.read(mergedelta->next, ec);
+        if (ec == error::object_doesnt_exist) {
             return;
         }
-        assert(rc_res == STATUS_OK);
-        auto n = deserialize<Key, Value>(buf.data, buf.length, mergedelta->next);
-        resolve_operation<Key, Value> op(merge_lptr, mergedelta->next, nullptr, context, merge_rc_version);
+        assert(!ec);
+        auto n = deserialize<Key, Value>(reinterpret_cast<const uint8_t*>(buf.data()), buf.length(), mergedelta->next);
+        resolve_operation<Key, Value, Backend> op(merge_lptr, mergedelta->next, nullptr, context, merge_rc_version);
         if (!n->accept(op)) {
             return;
         }
-        rc_res = rc_read(context.get_node_table().value, mergedelta->rm_next.value_ptr(), mergedelta->rm_next.length, &buf);
-        if (rc_res == STATUS_OBJECT_DOESNT_EXIST) {
+        buf = node_table.read(mergedelta->rm_next, ec);
+        if (ec == error::object_doesnt_exist) {
             return;
         }
-        assert(rc_res == STATUS_OK);
-        n = deserialize<Key, Value>(buf.data, buf.length, mergedelta->rm_next);
-        resolve_operation<Key, Value> op2(mergedelta->rmdelta, mergedelta->rm_next, nullptr, context, merge_rc_version);
+        assert(!ec);
+        n = deserialize<Key, Value>(reinterpret_cast<const uint8_t*>(buf.data()), buf.length(), mergedelta->rm_next);
+        resolve_operation<Key, Value, Backend> op2(mergedelta->rmdelta, mergedelta->rm_next, nullptr, context, merge_rc_version);
         if (!n->accept(op2)) {
             return;
         }
@@ -132,7 +129,7 @@ public:
             consolidate(merge_lptr, merge_pptr, merge_rc_version, mergedelta, context);
             return;
         }
-        physical_pointer pptr = context.cache.get_next_physical_ptr();
+        auto& node_table = context.get_node_table();
         key_compare<Key, Value> cmp;
         if (context.node_stack.size() > 1)
             context.node_stack.pop();
@@ -151,6 +148,7 @@ public:
             }
             if (iter->first == mergedelta->right_low_key) {
                 if (iter->second == mergedelta->rmdelta) {
+                    auto& ptr_table = context.get_ptr_table();
 
                     size_t nsize = inner->serialized_size();
                     if (nsize < MIN_NODE_SIZE && parent->lptr_.value != 1) {
@@ -160,14 +158,10 @@ public:
                     }
                     if (parent->lptr_.value == 1 && inner->array_.size() == 2) {
                         //decrease tree depth
-                        uint64_t rc_version;
-                        ramcloud_reject_rules rules;
-                        rules.doesntExist = 1;
-                        rules.givenVersion = parent->rc_version_;
-                        rules.versionNeGiven = 1;
-                        auto rc_res = rc_write_with_reject(context.get_ptr_table().value, parent->lptr_.value_ptr(), parent->lptr_.length, merge_pptr.value_ptr(), merge_pptr.length, &rules, &rc_version);
-                        if (rc_res == STATUS_WRONG_VERSION || rc_res == STATUS_OBJECT_DOESNT_EXIST) {
-                            if (rc_res == STATUS_WRONG_VERSION) {
+                        std::error_code ec;
+                        auto rc_version = ptr_table.update(parent->lptr_, merge_pptr, parent->rc_version_, ec);
+                        if (ec == error::wrong_version || ec == error::object_doesnt_exist) {
+                            if (ec == error::wrong_version) {
                                 context.cache.invalidate_if_older(parent->lptr_, rc_version);
                             }
                             else {
@@ -175,11 +169,9 @@ public:
                             }
                             continue;
                         }
-                        assert(rc_res == STATUS_OK);
-                        rc_res = rc_remove(context.get_node_table().value, parent->ptr_.value_ptr(), parent->ptr_.length);
-                        assert(rc_res == STATUS_OK);
-                        rc_res = rc_remove(context.get_ptr_table().value, merge_lptr.value_ptr(), merge_lptr.length);
-                        assert(rc_res == STATUS_OK);
+                        assert(!ec);
+                        node_table.remove(parent->ptr_);
+                        ptr_table.remove(merge_lptr, std::numeric_limits<uint64_t>::max());
                         consolidate(parent->lptr_, merge_pptr, rc_version, mergedelta, context);
                         return;
                     }
@@ -187,15 +179,14 @@ public:
                     auto rm_offset = iter - inner->array_.begin();
                     newinner.array_.erase(newinner.array_.begin() + rm_offset);
                     std::vector<uint8_t> data = newinner.serialize();
-                    auto rc_res = rc_write(context.get_node_table().value, pptr.value_ptr(), pptr.length, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
-                    assert(rc_res == STATUS_OK);
+
+                    auto pptr = node_table.get_next_ptr();
+                    node_table.insert(pptr, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
+
                     uint64_t rc_version;
-                    ramcloud_reject_rules rules;
-                    rules.doesntExist = 1;
-                    rules.givenVersion = parent->rc_version_;
-                    rules.versionNeGiven = 1;
+                    std::error_code ec;
                     if (rm_offset != 0) {
-                        rc_res = rc_write_with_reject(context.get_ptr_table().value, parent->lptr_.value_ptr(), parent->lptr_.length, pptr.value_ptr(), pptr.length, &rules, &rc_version);
+                        rc_version = ptr_table.update(parent->lptr_, pptr, parent->rc_version_, ec);
                     }
                     else {
                         //trigger parent merge
@@ -204,29 +195,27 @@ public:
                         rm_delta.low_key = newinner.low_key_;
                         rm_delta.level = newinner.level;
                         auto data = rm_delta.serialize();
-                        physical_pointer rm_pptr = context.cache.get_next_physical_ptr();
-                        __attribute__((unused)) auto rm_rc_res = rc_write(context.get_node_table().value, rm_pptr.value_ptr(), rm_pptr.length, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
-                        assert(rm_rc_res == STATUS_OK);
-                        rc_res = rc_write_with_reject(context.get_ptr_table().value, parent->lptr_.value_ptr(), parent->lptr_.length, rm_pptr.value_ptr(), rm_pptr.length, &rules, &rc_version);
-                        if (rc_res != STATUS_OK) {
-                            rm_rc_res = rc_remove(context.get_node_table().value, rm_pptr.value_ptr(), rm_pptr.length);
-                            assert(rm_rc_res == STATUS_OK);
+
+                        auto rm_pptr = node_table.get_next_ptr();
+                        node_table.insert(rm_pptr, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
+
+                        rc_version = ptr_table.update(parent->lptr_, rm_pptr, parent->rc_version_, ec);
+                        if (ec) {
+                            node_table.remove(rm_pptr);
                         }
                     }
-                    if (rc_res == STATUS_WRONG_VERSION || rc_res == STATUS_OBJECT_DOESNT_EXIST) {
-                        if (rc_res == STATUS_WRONG_VERSION) {
+                    if (ec == error::wrong_version || ec == error::object_doesnt_exist) {
+                        if (ec == error::wrong_version) {
                             context.cache.invalidate_if_older(parent->lptr_, rc_version);
                         }
                         else {
                             context.cache.invalidate(parent->lptr_);
                         }
-                        rc_res = rc_remove(context.get_node_table().value, pptr.value_ptr(), pptr.length);//save
-                        assert(rc_res == STATUS_OK);
+                        node_table.remove(pptr);
                         continue;
                     }
-                    assert(rc_res == STATUS_OK);
-                    rc_res = rc_remove(context.get_node_table().value, parent->ptr_.value_ptr(), parent->ptr_.length);
-                    assert(rc_res == STATUS_OK);
+                    assert(!ec);
+                    node_table.remove(parent->ptr_);
                     consolidate(merge_lptr, merge_pptr, merge_rc_version, mergedelta, context);
                     return;
                 }
@@ -239,7 +228,7 @@ public:
     }
 
     //continue the merge from a remove delta
-    static void continue_merge(logical_pointer removedelta_lptr, physical_pointer removedelta_pptr, uint64_t rm_rc_version, remove_delta<Key, Value> *rmdelta, operation_context<Key, Value>& context) {
+    static void continue_merge(logical_pointer removedelta_lptr, physical_pointer removedelta_pptr, uint64_t rm_rc_version, remove_delta<Key, Value> *rmdelta, operation_context<Key, Value, Backend>& context) {
         Key low_key = rmdelta->low_key;
         auto leftp = get_left_sibling(removedelta_lptr, low_key, context, rmdelta->level);
         if (leftp == nullptr) {
@@ -252,20 +241,18 @@ public:
         merge.rmdeltapptr = removedelta_pptr;
         merge.level = rmdelta->level;
         std::vector<uint8_t> data;
+        auto& node_table = context.get_node_table();
+        auto& ptr_table = context.get_ptr_table();
         for (;;) {
-            physical_pointer merge_pptr = context.cache.get_next_physical_ptr();
+            auto merge_pptr = node_table.get_next_ptr();
             merge.next = leftp->ptr_;
             data = merge.serialize();
-            auto rc_res = rc_write(context.get_node_table().value, merge_pptr.value_ptr(), merge_pptr.length, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
-            assert(rc_res == STATUS_OK);
-            ramcloud_reject_rules rules;
-            rules.doesntExist = 1;
-            rules.givenVersion = leftp->rc_version_;
-            rules.versionNeGiven = 1;
-            uint64_t merge_rc_version;
-            rc_res = rc_write_with_reject(context.get_ptr_table().value, leftp->lptr_.value_ptr(), leftp->lptr_.length, merge_pptr.value_ptr(), merge_pptr.length, &rules, &merge_rc_version);
-            if (rc_res == STATUS_WRONG_VERSION || rc_res == STATUS_OBJECT_DOESNT_EXIST) {
-                if (rc_res == STATUS_OBJECT_DOESNT_EXIST) {
+            node_table.insert(merge_pptr, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
+
+            std::error_code ec;
+            auto merge_rc_version = ptr_table.update(leftp->lptr_, merge_pptr, leftp->rc_version_, ec);
+            if (ec == error::wrong_version || ec == error::object_doesnt_exist) {
+                if (ec == error::object_doesnt_exist) {
                     context.cache.invalidate(leftp->lptr_);
                 }
                 leftp = fix_stack(low_key, context, search_bound::LAST_SMALLER);
@@ -281,11 +268,10 @@ public:
                         continue;
                     }
                 }
-                rc_res = rc_remove(context.get_node_table().value, merge_pptr.value_ptr(), merge_pptr.length);//save
-                assert(rc_res == STATUS_OK);
+                node_table.remove(merge_pptr);
                 return;
             }
-            assert(rc_res == STATUS_OK);
+            assert(!ec);
             continue_merge(leftp->lptr_, merge_pptr, merge_rc_version, &merge, context);
             return;
         }
@@ -311,27 +297,25 @@ public:
         rmdelta.low_key = to_merge->low_key_;
         rmdelta.next = nodep->ptr_;
         rmdelta.level = to_merge->level;
-        physical_pointer pptr = context.cache.get_next_physical_ptr();
         std::vector<uint8_t> data = rmdelta.serialize();
-        auto rc_res = rc_write(context.get_node_table().value, pptr.value_ptr(), pptr.length, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
-        assert(rc_res == STATUS_OK);
-        ramcloud_reject_rules rules;
-        rules.doesntExist = 1;
-        rules.givenVersion = nodep->rc_version_;
-        rules.versionNeGiven = 1;
-        uint64_t rc_version;
-        rc_res = rc_write_with_reject(context.get_ptr_table().value, nodep->lptr_.value_ptr(), nodep->lptr_.length, pptr.value_ptr(), pptr.length, &rules, &rc_version);
-        if (rc_res == STATUS_WRONG_VERSION || rc_res == STATUS_OBJECT_DOESNT_EXIST) {
-            if (rc_res == STATUS_WRONG_VERSION) {
+
+        auto& node_table = context.get_node_table();
+        auto pptr = node_table.get_next_ptr();
+        node_table.insert(pptr, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
+
+        auto& ptr_table = context.get_ptr_table();
+        std::error_code ec;
+        auto rc_version = ptr_table.update(nodep->lptr_, pptr, nodep->rc_version_, ec);
+        if (ec == error::wrong_version || ec == error::object_doesnt_exist) {
+            if (ec == error::wrong_version) {
                 context.cache.invalidate_if_older(nodep->lptr_, rc_version);
             } else {
                 context.cache.invalidate(nodep->lptr_);
             }
-            rc_res = rc_remove(context.get_node_table().value, pptr.value_ptr(), pptr.length);//save
-            assert(rc_res == STATUS_OK);
+            node_table.remove(pptr);
             return;
         }
-        assert(rc_res == STATUS_OK);
+        assert(!ec);
         continue_merge(nodep->lptr_, pptr, rc_version, &rmdelta, context);
     }
 

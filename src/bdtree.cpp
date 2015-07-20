@@ -1,4 +1,4 @@
-#include "bdtree.h"
+#include <bdtree/bdtree.h>
 
 namespace bdtree {
 
