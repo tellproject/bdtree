@@ -40,6 +40,11 @@ set_target_properties(bdtree PROPERTIES PUBLIC_HEADER "${BDTREE_PUBLIC_HDR_ABSOL
 target_include_directories(bdtree PUBLIC $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${INCLUDE_INSTALL_DIR}>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}> $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>)
 
+# Workaround for link failure with GCC 5 (GCC Bug 65913)
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+    target_link_libraries(bdtree PUBLIC atomic)
+endif()
+
 # Link against Boost
 target_include_directories(bdtree PUBLIC ${Boost_INCLUDE_DIRS})
 
