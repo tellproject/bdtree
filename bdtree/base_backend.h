@@ -7,11 +7,13 @@
 
 namespace bdtree {
 namespace detail {
-    void throw_error(const std::error_code& ec) {
-        if (ec) {
-            throw std::system_error(ec);
-        }
+
+inline void throw_error(const std::error_code& ec) {
+    if (ec) {
+        throw std::system_error(ec);
     }
+}
+
 } // namespace detail
 
 template <typename HandlerType>
