@@ -39,40 +39,14 @@ namespace bdtree {
         typedef bdtree::erase_result erase_result;
         typedef bdtree_iterator<Key, Value, Backend> iterator;
     public: // construction/destruction
-        map(Backend& backend, logical_table_cache<Key, Value, Backend>& cache, uint64_t tx_id, bool init = false)
+        map(Backend& backend, logical_table_cache<Key, Value, Backend>& cache, uint64_t tx_id, bool doInit = false)
             : backend_(backend), cache_(cache), tx_id_(tx_id)
         {
-            if (init) {
-                auto& node_table = backend_.get_node_table();
-                auto root_pptr = node_table.get_next_ptr();
-                assert(root_pptr == physical_pointer{1});
-                leaf_node<Key, Value>* node = new leaf_node<Key, Value>(root_pptr);
-                node->low_key_ = null_key<Key>::value();
-                auto ser = node->serialize();
-
-                //write root node at pptr{1}
-                std::error_code ec;
-                node_table.insert(root_pptr, reinterpret_cast<const char*>(ser.data()), ser.size(), ec);
-                if (ec) {
-                    assert(ec == error::object_exists);
-                    delete node;
-                    return;
-                }
-
-                // ptr to root (lptr{1} -> pptr{1})
-                auto last_tx_id = get_last_tx_id();
-
-                auto& ptr_table = backend_.get_ptr_table();
-                auto root_lptr = ptr_table.get_next_ptr();
-                assert(root_lptr == logical_pointer{1});
-                auto new_lptr_version = ptr_table.insert(root_lptr, root_pptr);
-                node_pointer<Key, Value> *nptr = new node_pointer<Key, Value>(root_lptr, root_pptr, new_lptr_version);
-                nptr->node_ = node;
-                if (!cache_.add_entry(nptr, last_tx_id)) {
-                    delete nptr;
-                }
+            if (doInit) {
+                init(backend_, cache_, tx_id_);
             }
         }
+
     public: // operations
         iterator find(const key_type& key) const {
             return lower_bound(key, backend_, cache_, tx_id_);
@@ -166,4 +140,36 @@ namespace bdtree {
             std::cout << "leaf nodes in use: " << leaf_nodes_in_use << std::endl;
         }
     };
+
+    template<typename Key, typename Value, typename Backend>
+    void init(Backend& backend, logical_table_cache<Key, Value, Backend>& cache, uint64_t tx_id) {
+        auto& node_table = backend.get_node_table();
+        auto root_pptr = node_table.get_next_ptr();
+        assert(root_pptr == physical_pointer{1});
+        leaf_node<Key, Value>* node = new leaf_node<Key, Value>(root_pptr);
+        node->low_key_ = null_key<Key>::value();
+        auto ser = node->serialize();
+
+        //write root node at pptr{1}
+        std::error_code ec;
+        node_table.insert(root_pptr, reinterpret_cast<const char*>(ser.data()), ser.size(), ec);
+        if (ec) {
+            assert(ec == error::object_exists);
+            delete node;
+            return;
+        }
+
+        // ptr to root (lptr{1} -> pptr{1})
+        auto last_tx_id = get_last_tx_id();
+
+        auto& ptr_table = backend.get_ptr_table();
+        auto root_lptr = ptr_table.get_next_ptr();
+        assert(root_lptr == logical_pointer{1});
+        auto new_lptr_version = ptr_table.insert(root_lptr, root_pptr);
+        node_pointer<Key, Value> *nptr = new node_pointer<Key, Value>(root_lptr, root_pptr, new_lptr_version);
+        nptr->node_ = node;
+        if (!cache.add_entry(nptr, last_tx_id)) {
+            delete nptr;
+        }
+    }
 }
