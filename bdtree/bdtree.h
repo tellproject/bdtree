@@ -43,7 +43,7 @@ namespace bdtree {
             : backend_(backend), cache_(cache), tx_id_(tx_id)
         {
             if (doInit) {
-                init(backend_, cache_, tx_id_);
+                init(backend_, cache_);
             }
         }
 
@@ -142,7 +142,7 @@ namespace bdtree {
     };
 
     template<typename Key, typename Value, typename Backend>
-    void init(Backend& backend, logical_table_cache<Key, Value, Backend>& cache, uint64_t tx_id) {
+    void init(Backend& backend, logical_table_cache<Key, Value, Backend>& cache) {
         auto& node_table = backend.get_node_table();
         auto root_pptr = node_table.get_next_ptr();
         assert(root_pptr == physical_pointer{1});
