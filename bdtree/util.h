@@ -76,12 +76,14 @@ struct null_key<std::tuple<T> > {
 
 template<typename ForwardIt, typename T, typename Compare>
 ForwardIt last_smaller_equal(ForwardIt first, ForwardIt last, const T& value, Compare cmp) {
-    return --std::upper_bound(first, last, value, cmp);
+    auto iter = std::upper_bound(first, last, value, cmp);
+    return (iter == first ? last : --iter);
 }
 
 template<typename ForwardIt, typename T, typename Compare>
 ForwardIt last_smaller(ForwardIt first, ForwardIt last, const T& value, Compare cmp) {
-    return --std::lower_bound(first, last, value, cmp);
+    auto iter = std::lower_bound(first, last, value, cmp);
+    return (iter == first ? last : --iter);
 }
 
 template<typename Node, typename Key>
