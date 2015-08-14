@@ -168,7 +168,7 @@ public:
         auto& ptr_table = context.get_ptr_table();
         auto right_lptr = ptr_table.get_next_ptr();
 
-        auto lpointer_rc_version = ptr_table.insert(right_lptr, right_pptr);
+        auto right_lptr_version = ptr_table.insert(right_lptr, right_pptr);
 
         NodeType* right = new NodeType(right_pptr);
         right->array_.insert(right->array_.begin(), to_split->array_.begin() + to_split->array_.size()/2, to_split->array_.end());
@@ -185,9 +185,9 @@ public:
             logical_pointer lptr_left = ptr_table.get_next_ptr();
             physical_pointer pptr_left = node_table.get_next_ptr();
             physical_pointer pptr_newroot = node_table.get_next_ptr();
-            auto rc_version = ptr_table.insert(lptr_left, pptr_left);
+            auto lptr_left_version = ptr_table.insert(lptr_left, pptr_left);
 
-            node_pointer<Key, Value> *leftp = new node_pointer<Key, Value>(lptr_left, pptr_left, rc_version);
+            node_pointer<Key, Value> *leftp = new node_pointer<Key, Value>(lptr_left, pptr_left, lptr_left_version);
             inner_node<Key, Value> *new_root = new inner_node<Key, Value>(pptr_left);
             new_root->low_key_ = null_key<Key>::value();
             new_root->array_.reserve(2);
@@ -209,10 +209,10 @@ public:
 
             std::lock_guard<std::mutex> _(nodep->mutex_);
             std::error_code ec;
-            rc_version = ptr_table.update(nodep->lptr_, pptr_newroot, nodep->rc_version_, ec);
+            auto rc_version = ptr_table.update(nodep->lptr_, pptr_newroot, nodep->rc_version_, ec);
             assert(ec != error::object_doesnt_exist); //the root node must always exist
             if (!ec) {
-                node_pointer<Key, Value>* rightp = new node_pointer<Key, Value>(right_lptr, right_pptr, lpointer_rc_version);
+                node_pointer<Key, Value>* rightp = new node_pointer<Key, Value>(right_lptr, right_pptr, right_lptr_version);
                 node_pointer<Key, Value>* rootp = new node_pointer<Key, Value>(nodep->lptr_, pptr_newroot, rc_version);
                 rootp->node_ = new_root;
                 rightp->node_ = right;
@@ -230,9 +230,9 @@ public:
                 return;
             } else if (ec == error::wrong_version) {
                 context.cache.invalidate_if_older(nodep->lptr_, rc_version);
-                ptr_table.remove(right_lptr, lpointer_rc_version);
+                ptr_table.remove(right_lptr, right_lptr_version);
                 node_table.remove(right_pptr);
-                ptr_table.remove(lptr_left, rc_version);
+                ptr_table.remove(lptr_left, lptr_left_version);
                 node_table.remove(pptr_newroot);
                 node_table.remove(pptr_left);
                 delete right;
@@ -264,7 +264,7 @@ public:
             } else {
                 context.cache.invalidate(nodep->lptr_);
             }
-            ptr_table.remove(right_lptr, lpointer_rc_version);
+            ptr_table.remove(right_lptr, right_lptr_version);
             node_table.remove(right_pptr);
             node_table.remove(split_ptr);
             delete split;
