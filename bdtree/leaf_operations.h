@@ -144,6 +144,8 @@ bool exec_leaf_operation(const Key& key, Backend& backend, logical_table_cache<K
             return true;
         } else if (ec == error::object_doesnt_exist) {
             context.cache.invalidate(leaf.first->lptr_);
+        } else if (ec != error::wrong_version) {
+            assert(false);
         }
         node_table.remove(pptr);
         leaf.first = lower_bound_node_with_context(key, context, search_bound::LAST_SMALLER_EQUAL, cache_use::None);
