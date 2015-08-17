@@ -60,7 +60,7 @@ public:
 
     uint64_t insert(bdtree::logical_pointer lptr, bdtree::physical_pointer pptr, std::error_code& ec) {
         typename decltype(ptrs_mutex_)::scoped_lock _(ptrs_mutex_, false);
-        auto res = ptrs_.emplace(lptr, std::make_tuple(pptr, 0x1ull));
+        auto res = ptrs_.insert(std::make_pair(lptr, std::make_tuple(pptr, 0x1ull)));
         if (!res.second) {
             ec = make_error_code(bdtree::error::object_exists);
         }
@@ -141,7 +141,7 @@ public:
 
     void insert(bdtree::physical_pointer pptr, const char* data, size_t length, std::error_code& ec) {
         typename decltype(nodes_mutex_)::scoped_lock _(nodes_mutex_, false);
-        auto res = nodes_.emplace(pptr, std::vector<char>(data, data + length));
+        auto res = nodes_.insert(std::make_pair(pptr, std::vector<char>(data, data + length)));
         if (!res.second) {
             ec = make_error_code(bdtree::error::object_exists);
         }

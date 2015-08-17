@@ -9,7 +9,7 @@ struct size_policy<Archiver, boost::optional<T>>
 {
     std::size_t operator() (Archiver& ar, const boost::optional<T>& obj) const
     {
-        bool b = obj;
+        bool b = (obj != boost::none);
         ar & b;
         if (b) {
             ar & *obj;
@@ -22,7 +22,7 @@ template<typename Archiver, typename T>
 struct serialize_policy<Archiver, boost::optional<T>>
 {
     uint8_t* operator() (Archiver& ar, const boost::optional<T>& obj, uint8_t* pos) {
-        bool b = obj;
+        bool b = (obj != boost::none);
         ar & b;
         if (b) {
             ar & *obj;
