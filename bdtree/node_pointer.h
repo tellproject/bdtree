@@ -1,6 +1,7 @@
 #pragma once
 #include "logical_table_cache.h"
 #include "base_types.h"
+#include "error_code.h"
 
 #include <crossbow/allocator.hpp>
 
