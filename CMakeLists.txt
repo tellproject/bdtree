@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(BdTree)
 
-set(CONSOLIDATE_AT "10" CACHE STRING "Number of delta nodes allowed in leaf level")
+set(CONSOLIDATE_AT "0" CACHE STRING "Number of delta nodes allowed in leaf level")
 set(MAX_NODE_SIZE "2048" CACHE STRING "Maximal size of a node")
 set(MIN_NODE_SIZE "512" CACHE STRING "Minimal size of a node")
 
