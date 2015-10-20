@@ -26,6 +26,7 @@
 #include <cstring>
 #include <type_traits>
 #include <vector>
+#include <unordered_map>
 #include <string>
 #include <memory>
 #include <cassert>
@@ -106,6 +107,21 @@ struct serialize_policy<Archiver, std::string>
         pos += sizeof(std::uint32_t);
         memcpy(pos, obj.data(), len);
         return pos + len;
+    }
+};
+
+template<class Archiver, class Key, class Value, class Hash, class Predicate, class Allocator>
+struct serialize_policy<Archiver, std::unordered_map<Key, Value, Hash, Predicate, Allocator>>
+{
+    using type = std::unordered_map<Key, Value, Hash, Predicate, Allocator>;
+    uint8_t* operator() (Archiver& ar, const type& map, uint8_t* pos) const {
+        std::size_t s = map.size();
+        ar & s;
+        for (const auto& e : map) {
+            ar & e.first;
+            ar & e.second;
+        }
+        return ar.pos;
     }
 };
 
@@ -202,6 +218,24 @@ struct deserialize_policy<Archiver, std::pair<U, V>>
     }
 };
 
+template<class Archiver, class Key, class Value, class Hash, class Predicate, class Allocator>
+struct deserialize_policy<Archiver, std::unordered_map<Key, Value, Hash, Predicate, Allocator>>
+{
+    using type = std::unordered_map<Key, Value, Hash, Predicate, Allocator>;
+    const uint8_t* operator() (Archiver& ar, type& out, const uint8_t* ptr) const {
+        size_t sz;
+        ar & sz;
+        for (size_t i = 0; i < sz; ++i) {
+            Key f;
+            Value s;
+            ar & f;
+            ar & s;
+            out.emplace(std::move(f), std::move(s));
+        }
+        return ar.pos;
+    }
+};
+
 template<typename Archiver, typename T, typename Allocator>
 struct deserialize_policy<Archiver, std::vector<T, Allocator>>
 {
@@ -286,6 +320,21 @@ struct size_policy<Archiver, std::pair<U, V>>
     }
 };
 
+template<class Archiver, class Key, class Value, class Hash, class Predicate, class Allocator>
+struct size_policy<Archiver, std::unordered_map<Key, Value, Hash, Predicate, Allocator>>
+{
+    using type = std::unordered_map<Key, Value, Hash, Predicate, Allocator>;
+    std::size_t operator() (Archiver& ar, const type& map) const {
+        std::size_t s;
+        ar & s;
+        for (auto& e : map) {
+            ar & e.first;
+            ar & e.second;
+        }
+        return 0;
+    }
+};
+
 template<typename Archiver, typename T, typename Allocator>
 struct size_policy<Archiver, std::vector<T, Allocator>>
 {
@@ -358,6 +407,7 @@ struct serializer {
     uint8_t* pos;
 
     serializer(std::size_t size) : buffer(new uint8_t[size]), pos(buffer.get()) {}
+    serializer(uint8_t* buf) : buffer(buf) {}
 
     template<typename T>
     typename std::enable_if<!has_visit<T>::value, serializer&>::type operator& (const T& obj) {
