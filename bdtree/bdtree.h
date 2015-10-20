@@ -22,7 +22,7 @@
  */
 #pragma once
 
-#include <bdtree/serialize_policies.h>
+#include <crossbow/Serializer.hpp>
 #include <bdtree/primitive_types.h>
 #include <bdtree/forward_declarations.h>
 #include <bdtree/base_types.h>

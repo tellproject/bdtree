@@ -25,8 +25,8 @@
 #include <bdtree/forward_declarations.h>
 #include <bdtree/primitive_types.h>
 #include <bdtree/stl_specializations.h>
-#include <bdtree/serializer.h>
 
+#include <crossbow/Serializer.hpp>
 #include <crossbow/allocator.hpp>
 
 #include <stack>
@@ -145,13 +145,13 @@ struct serializable_node : T<Key, Value> {
         std::vector<uint8_t> res(size);
         res[0] = uint8_t(T<Key, Value>::node_type);
         static_assert(sizeof(uint8_t) == sizeof(parent::node_type), "Can not assign node type to uint8_t");
-        serializer_into_array ser(res.data() + sizeof(parent::node_type));
+        crossbow::serializer_into_array ser(res.data() + sizeof(parent::node_type));
         ser & *this;
         return res;
     }
 
     std::size_t serialized_size() const {
-        sizer s;
+        crossbow::sizer s;
         s & *this;
         return s.size + sizeof(parent::node_type);
     }
@@ -169,43 +169,43 @@ node<Key, Value>* deserialize(const uint8_t* ptr, uint64_t size, physical_pointe
     case node_type_t::InnerNode:
     {
         inner_node<Key, Value> *res = new inner_node<Key, Value>(pptr);
-        ::deserialize(*res, ptr + 1);
+        crossbow::deserialize(*res, ptr + 1);
         return res;
     }
     case node_type_t::LeafNode:
     {
         leaf_node<Key, Value> *res = new leaf_node<Key, Value>(pptr);
-        ::deserialize(*res, ptr + 1);
+        crossbow::deserialize(*res, ptr + 1);
         return res;
     }
     case node_type_t::InsertDelta:
     {
         insert_delta<Key, Value> *res = new insert_delta<Key, Value>();
-        ::deserialize(*res, ptr + 1);
+        crossbow::deserialize(*res, ptr + 1);
         return res;
     }
     case node_type_t::DeleteDelta:
     {
         delete_delta<Key, Value> *res = new delete_delta<Key, Value>();
-        ::deserialize(*res, ptr + 1);
+        crossbow::deserialize(*res, ptr + 1);
         return res;
     }
     case node_type_t::SplitDelta:
     {
         split_delta<Key, Value> *res = new split_delta<Key, Value>();
-        ::deserialize(*res, ptr + 1);
+        crossbow::deserialize(*res, ptr + 1);
         return res;
     }
     case node_type_t::RemoveDelta:
     {
         remove_delta<Key, Value> *res = new remove_delta<Key, Value>();
-        ::deserialize(*res, ptr + 1);
+        crossbow::deserialize(*res, ptr + 1);
         return res;
     }
     case node_type_t::MergeDelta:
     {
         merge_delta<Key, Value> *res = new merge_delta<Key, Value>();
-        ::deserialize(*res, ptr + 1);
+        crossbow::deserialize(*res, ptr + 1);
         return res;
     }
     default:

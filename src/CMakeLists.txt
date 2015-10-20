@@ -22,8 +22,6 @@ set(BDTREE_PUBLIC_HDR
     primitive_types.h
     resolve_operation.h
     search_operation.h
-    serialize_policies.h
-    serializer.h
     split_operation.h
     stl_specializations.h
     util.h
