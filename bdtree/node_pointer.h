@@ -29,7 +29,6 @@
 
 #include <atomic>
 #include <memory>
-#include <mutex>
 
 namespace bdtree {
 	template<typename Key, typename Value>
@@ -40,7 +39,6 @@ namespace bdtree {
         const uint64_t rc_version_;
         mutable node<Key, Value>* node_ = nullptr;
         mutable std::unique_ptr<node_pointer<Key, Value> > old_;
-        mutable std::mutex mutex_;
     public: // Construction/Destruction
         node_pointer(logical_pointer lptr, physical_pointer pointer, uint64_t rc_version)
         : ptr_(pointer), lptr_(lptr), last_tx_id_(0), rc_version_(rc_version) {}
@@ -88,15 +86,7 @@ namespace bdtree {
         template <typename Backend>
         bool resolve(operation_context<Key, Value, Backend>& context) {
             if (!node_) {
-                assert(context.locks.find(lptr_) == context.locks.end());
-                std::lock_guard<decltype(mutex_)> l(mutex_);
-#ifndef NDEBUG
-                context.locks.insert(lptr_);
-#endif
                 if (node_) {
-#ifndef NDEBUG
-                    context.locks.erase(lptr_);
-#endif
                     goto END;
                 }
 
@@ -104,26 +94,17 @@ namespace bdtree {
                 std::error_code ec;
                 auto buf = node_table.read(ptr_, ec);
                 if (ec == error::object_doesnt_exist) {
-#ifndef NDEBUG
-                    context.locks.erase(lptr_);
-#endif
                     return false;
                 }
                 assert(!ec);
                 auto n = deserialize<Key, Value>(reinterpret_cast<const uint8_t*>(buf.data()), buf.length(), ptr_);
                 resolve_operation<Key, Value, Backend> op(lptr_, ptr_, old_.get(), context, rc_version_);
                 if (!n->accept(op)) {
-#ifndef NDEBUG
-                    context.locks.erase(lptr_);
-#endif
                     return false;
                 }
                 crossbow::allocator::destroy(old_.release());
                 node_ = op.result;
                 op.result = nullptr;
-#ifndef NDEBUG
-                context.locks.erase(lptr_);
-#endif
             }
         END:
             return true;

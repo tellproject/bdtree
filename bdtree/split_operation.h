@@ -29,7 +29,6 @@
 #include <bdtree/error_code.h>
 
 #include <functional>
-#include <mutex>
 #include <stack>
 
 namespace bdtree {
@@ -80,7 +79,9 @@ private:
         if (ec == error::object_doesnt_exist) {
             return;
         }
-        assert(!ec);
+        if (ec) {
+            throw std::system_error(ec);
+        }
         auto n = deserialize<Key, Value>(reinterpret_cast<const uint8_t*>(buf.data()), buf.length(), delta->next);
         resolve_operation<Key, Value, Backend> op(split_lptr, delta->next, nullptr, context, lptr_version);
         if (!n->accept(op)) {
@@ -141,7 +142,9 @@ public:
             if (ec == error::object_doesnt_exist) {
                 return;
             }
-            assert(!ec);
+            if (ec) {
+                throw std::system_error(ec);
+            }
             if (split_pptr != std::get<0>(actual_split_pptr)) {
                 return;
             }
@@ -229,7 +232,6 @@ public:
             data = left->serialize();
             node_table.insert(pptr_left, reinterpret_cast<const char*>(data.data()), uint32_t(data.size()));
 
-            std::lock_guard<std::mutex> _(nodep->mutex_);
             std::error_code ec;
             auto rc_version = ptr_table.update(nodep->lptr_, pptr_newroot, nodep->rc_version_, ec);
             assert(ec != error::object_doesnt_exist); //the root node must always exist
@@ -262,7 +264,7 @@ public:
                 delete new_root;
                 return;
             } else {
-                assert(false);
+                throw std::system_error(ec);
             }
             assert(false);
             return;
@@ -291,7 +293,7 @@ public:
             node_table.remove(split_ptr);
             delete split;
         } else {
-            assert(false);
+            throw std::system_error(ec);
         }
     }
 
