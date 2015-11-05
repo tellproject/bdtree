@@ -103,7 +103,7 @@ template<typename Key, typename Value, typename Backend>
 bdtree_iterator<Key, Value, Backend> lower_bound_with_context(const Key & key,
         operation_context<Key, Value, Backend>& context, search_bound bound) {
     return bdtree_iterator<Key, Value, Backend>(std::move(context), lower_bound_node_with_context(key, context, bound),
-            key);
+            key, bound);
 }
 
 template<typename Key, typename Value, typename Backend>

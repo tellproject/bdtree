@@ -43,10 +43,13 @@ namespace bdtree {
         typename decltype(leaf_node<Key,Value>::array_)::iterator current_iterator_;
         key_compare<Key, Value> cmp_;
         bdtree_iterator(){}
-        bdtree_iterator(operation_context<Key, Value, Backend> && context, decltype(current_) n, const Key & key)
+        bdtree_iterator(operation_context<Key, Value, Backend> && context, decltype(current_) n, const Key & key, search_bound bound = search_bound::LAST_SMALLER_EQUAL)
             : context_(std::move(context)), current_(n) {
             assert(current_ != nullptr);
             current_iterator_ = std::lower_bound(current_->as_leaf()->array_.begin(), current_->as_leaf()->array_.end(), key, cmp_);
+            if (bound == search_bound::LAST_SMALLER) {
+                current_iterator_ = (current_iterator_ == current_->as_leaf()->array_.begin() ? current_->as_leaf()->array_.end() : --current_iterator_);
+            }
             while (current_iterator_ == current_->as_leaf()->array_.end()) {
                 if (set_void_if_after())
                     return;
@@ -176,13 +179,13 @@ namespace bdtree {
             if (current_iterator_ != current_->as_leaf()->array_.begin() - 1) {
                 return *this;
             }
+            auto lkey = current_->as_leaf()->low_key_;
             do {
                 if (set_void_if_before()) {
                     return *this;
                 }
                 current_ = get_previous(*context_, current_);
             } while (current_->as_leaf()->array_.empty());
-            auto& lkey = current_->as_leaf()->low_key_;
             if (current_->as_leaf()->high_key_ && *current_->as_leaf()->high_key_ == lkey) {
                 current_iterator_ = current_->as_leaf()->array_.end() - 1;
                 return *this;
