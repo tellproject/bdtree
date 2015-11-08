@@ -37,7 +37,7 @@ enum class cache_use {
 
 template<typename Key, typename Value, typename Backend>
 node_pointer<Key, Value>* lower_bound_node_with_context(const Key & key,
-        operation_context<Key, Value, Backend>& context, search_bound bound, cache_use use_cache = cache_use::Current) {
+        operation_context<Key, Value, Backend>& context, search_bound bound, cache_use use_cache = cache_use::None) {
     assert(!context.node_stack.empty());
     auto get_child = [&context, use_cache] (logical_pointer lptr) -> node_pointer<Key, Value>* {
         assert(lptr == context.node_stack.top());
