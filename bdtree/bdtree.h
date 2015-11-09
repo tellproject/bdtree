@@ -73,6 +73,30 @@ namespace bdtree {
         iterator find(const key_type& key) const {
             return lower_bound(key, backend_, cache_, tx_id_);
         }
+
+        iterator find_last_smaller_equal(const key_type& key) const {
+            operation_context<Key, Value, Backend> context{backend_, cache_, tx_id_};
+
+            logical_pointer lptr{1};
+            context.node_stack.push(lptr);
+            node_pointer<Key, Value>* res = lower_bound_node_with_context(key, context,
+                    search_bound::LAST_SMALLER_EQUAL);
+            assert(res != nullptr);
+
+            key_compare<Key, Value> cmp;
+            auto iter = std::upper_bound(res->as_leaf()->array_.begin(), res->as_leaf()->array_.end(), key, cmp);
+            while (iter == res->as_leaf()->array_.end()) {
+                if (!res->as_leaf()->high_key_)
+                    break;
+                res = get_next(context, res);
+                iter = std::upper_bound(res->as_leaf()->array_.begin(), res->as_leaf()->array_.end(), key, cmp);
+            }
+
+            bdtree_iterator<Key, Value, Backend> i(std::move(context), res, std::move(iter));
+            --i;
+            return i;
+        }
+
         iterator end() const {
             return iterator();
         }

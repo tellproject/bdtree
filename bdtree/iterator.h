@@ -58,6 +58,11 @@ namespace bdtree {
             }
         }
         
+        bdtree_iterator(operation_context<Key, Value, Backend> && context, decltype(current_) n, typename decltype(leaf_node<Key,Value>::array_)::iterator iter)
+            : context_(std::move(context)), current_(n), current_iterator_(std::move(iter)) {
+            assert(current_ != nullptr);
+        }
+
         template <uint FakeParam = 1>
         erase_result erase_if_no_newer() {
             assert(!after());
