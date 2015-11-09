@@ -97,9 +97,9 @@ namespace bdtree {
             return exec_leaf_operation(key, backend_, cache_, tx_id_, op);
         }
 
-        bool remove_if_unmodified(iterator& iter) {
-            return iter.erase_if_no_newer() == erase_result::Success;
-        }
+        //bool remove_if_unmodified(iterator& iter) {
+        //    return iter.erase_if_no_newer() == erase_result::Success;
+        //}
 
         void print_statistics() {
             auto& node_table = backend_.get_node_table();
